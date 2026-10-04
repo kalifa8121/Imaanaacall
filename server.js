@@ -2,129 +2,99 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const { Pool } = require('pg');
+const path = require('path');
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server, { cors: { origin: "*" } });
+const io = new Server(server);
 
-app.use(express.json());
+const PORT = process.env.PORT || 10000;
 
-// Neon PostgreSQL Database Connection
+// PostgreSQL Connection
 const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-    ssl: { rejectUnauthorized: false }
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false
 });
 
-// Database Tables Setup
-pool.query(`
-    CREATE TABLE IF NOT EXISTS users (
+// Middleware & Static Files
+app.use(express.json());
+app.use(express.static(path.join(__dirname, 'public')));
+
+// Database Setup
+async function initDB() {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS messages (
         id SERIAL PRIMARY KEY,
-        username VARCHAR(50) UNIQUE NOT NULL,
-        is_paid BOOLEAN DEFAULT FALSE,
-        balance NUMERIC DEFAULT 0.00
-    );
-    CREATE TABLE IF NOT EXISTS messages (
-        id SERIAL PRIMARY KEY,
-        sender VARCHAR(50),
-        text TEXT,
-        audio TEXT,
+        username VARCHAR(50),
+        message TEXT,
+        audio_url TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
-`).catch(err => console.error("Database initialization error:", err));
+      );
+    `);
+    console.log("Database initialized successfully.");
+  } catch (err) {
+    console.error("Database initialization error:", err);
+  }
+}
+initDB();
 
-const activeUsers = {};
+// Active users tracking
+const users = {};
 
-// Express Routes
-app.get('/', (req, res) => {
-    res.sendFile(__dirname + '/public/index.html');
-});
-
-// Admin Route: Galii fi Too'annoo (Monetization Control)
-app.get('/api/admin/users', async (req, res) => {
-    try {
-        const result = await pool.query('SELECT * FROM users ORDER BY id DESC');
-        res.json(result.rows);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-app.post('/api/admin/toggle-paid', async (req, res) => {
-    const { username, is_paid } = req.body;
-    try {
-        await pool.query('UPDATE users SET is_paid = $1 WHERE username = $2', [is_paid, username]);
-        res.json({ success: true, message: `Status update gochuu milkaa'eera.` });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// Realtime Communications Logic
 io.on('connection', (socket) => {
-    socket.on('join', async (username) => {
-        activeUsers[socket.id] = { id: socket.id, username };
-        
-        // Save or update user in Neon DB
-        await pool.query(
-            'INSERT INTO users (username) VALUES ($1) ON CONFLICT (username) DO NOTHING',
-            [username]
-        );
+  console.log('User connected:', socket.id);
 
-        io.emit('user-list', Object.values(activeUsers));
-        
-        // Message History Fetch
-        const history = await pool.query('SELECT * FROM messages ORDER BY id DESC LIMIT 50');
-        socket.emit('message-history', history.rows.reverse());
+  socket.on('register-user', (username) => {
+    users[socket.id] = { id: socket.id, username };
+    io.emit('update-user-list', Object.values(users));
+  });
+
+  // Handle Call Request
+  socket.on('call-user', (data) => {
+    io.to(data.userToCall).emit('incoming-call', {
+      signal: data.signalData,
+      from: socket.id,
+      callerName: data.callerName,
+      callType: data.callType // 'audio' or 'video'
     });
+  });
 
-    socket.on('send-message', async (data) => {
-        const sender = activeUsers[socket.id]?.username || 'Anonymous';
-        
-        // Save to Neon Database
-        await pool.query(
-            'INSERT INTO messages (sender, text, audio) VALUES ($1, $2, $3)',
-            [sender, data.text || null, data.audio || null]
-        );
+  // Handle Accept Call
+  socket.on('accept-call', (data) => {
+    io.to(data.to).emit('call-accepted', data.signal);
+  });
 
-        io.emit('chat-message', {
-            sender,
-            text: data.text,
-            audio: data.audio,
-            created_at: new Date()
-        });
-    });
+  // Handle Reject Call
+  socket.on('reject-call', (data) => {
+    io.to(data.to).emit('call-rejected');
+  });
 
-    // WebRTC Calling Signals
-    socket.on('call-user', (data) => {
-        socket.to(data.to).emit('incoming-call', {
-            from: socket.id,
-            callerName: activeUsers[socket.id]?.username,
-            offer: data.offer,
-            isVideo: data.isVideo
-        });
-    });
+  // Handle End Call
+  socket.on('end-call', (data) => {
+    io.to(data.to).emit('call-ended');
+  });
 
-    socket.on('answer-call', (data) => {
-        socket.to(data.to).emit('call-answered', { answer: data.answer });
-    });
+  // Chat Messages
+  socket.on('send-message', async (data) => {
+    try {
+      await pool.query(
+        'INSERT INTO messages (username, message, audio_url) VALUES ($1, $2, $3)',
+        [data.username, data.message || null, data.audioUrl || null]
+      );
+      io.emit('new-message', data);
+    } catch (err) {
+      console.error("Error saving message:", err);
+    }
+  });
 
-    socket.on('ice-candidate', (data) => {
-        socket.to(data.to).emit('ice-candidate', { candidate: data.candidate });
-    });
-
-    socket.on('end-call', (data) => {
-        socket.to(data.to).emit('call-ended');
-    });
-
-    socket.on('disconnect', () => {
-        delete activeUsers[socket.id];
-        io.emit('user-list', Object.values(activeUsers));
-    });
+  socket.on('disconnect', () => {
+    delete users[socket.id];
+    io.emit('update-user-list', Object.values(users));
+    console.log('User disconnected:', socket.id);
+  });
 });
 
-app.use(express.static('public'));
-
-const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
+  console.log(`Server running on port ${PORT}`);
 });
