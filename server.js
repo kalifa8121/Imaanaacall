@@ -3,97 +3,32 @@ const http = require('http');
 const { Server } = require('socket.io');
 const { Pool } = require('pg');
 const bcrypt = require('bcryptjs');
+const path = require('path');
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: "*" } });
 
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ extended: true }));
-app.use(express.static('public'));
+app.use(express.json());
+app.use(express.static(path.join(__dirname, 'public')));
 
+// Database Connection
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false }
 });
 
-let onlineUsers = {};
+// Online Users Map: { username: socketId }
+const onlineUsers = new Map();
 
-// --- SOCKET.IO EVENTS ---
-io.on('connection', (socket) => {
-  socket.on('register-user', async (username) => {
-    onlineUsers[username] = socket.id;
-    io.emit('update-user-list', Object.keys(onlineUsers));
-
-    try {
-      const missedRes = await pool.query(
-        'SELECT * FROM missed_calls WHERE receiver_username = $1 AND seen = FALSE ORDER BY created_at DESC',
-        [username]
-      );
-      if (missedRes.rows.length > 0) {
-        socket.emit('check-missed-calls', missedRes.rows);
-        await pool.query('UPDATE missed_calls SET seen = TRUE WHERE receiver_username = $1', [username]);
-      }
-    } catch (err) {
-      console.error("Missed Call Fetch Error:", err);
-    }
-  });
-
-  socket.on('create-post', async (data) => {
-    try {
-      const res = await pool.query(
-        'INSERT INTO posts (username, content, media_url, media_type, approved) VALUES ($1, $2, $3, $4, TRUE) RETURNING *',
-        [data.username, data.content, data.mediaUrl || null, data.mediaType || null]
-      );
-      io.emit('new-post-created', res.rows[0]);
-    } catch (err) {
-      console.error("Post Error:", err);
-    }
-  });
-
-  socket.on('call-user', async (data) => {
-    const { callee, caller, type, signalData } = data;
-    const targetSocketId = onlineUsers[callee];
-
-    if (targetSocketId) {
-      io.to(targetSocketId).emit('incoming-call', { caller, type, signalData });
-    } else {
-      try {
-        await pool.query(
-          'INSERT INTO missed_calls (caller_username, receiver_username, call_type) VALUES ($1, $2, $3)',
-          [caller, callee, type]
-        );
-        socket.emit('call-offline-notice', { callee });
-      } catch (err) {
-        console.error("Save Missed Call Error:", err);
-      }
-    }
-  });
-
-  socket.on('disconnect', () => {
-    for (let user in onlineUsers) {
-      if (onlineUsers[user] === socket.id) {
-        delete onlineUsers[user];
-        break;
-      }
-    }
-    io.emit('update-user-list', Object.keys(onlineUsers));
-  });
-});
-
-// --- AUTHENTICATION ROUTES ---
+// ------------------- API ROUTES -------------------
 
 // 1. SIGNUP API
 app.post('/api/auth/signup', async (req, res) => {
   const { username, password, phone } = req.body;
-  
-  if (!username || !password) {
-    return res.status(400).json({ success: false, message: "Username fi Password guutuu qabdu!" });
-  }
-
   try {
-    const checkUser = await pool.query('SELECT * FROM users WHERE username = $1', [username]);
-    if (checkUser.rows.length > 0) {
+    const userCheck = await pool.query('SELECT * FROM users WHERE username = $1', [username]);
+    if (userCheck.rows.length > 0) {
       return res.status(400).json({ success: false, message: "Username'n kun dhihaateera!" });
     }
 
@@ -106,22 +41,17 @@ app.post('/api/auth/signup', async (req, res) => {
     res.json({ success: true, user: newUser.rows[0] });
   } catch (err) {
     console.error("Signup Error:", err);
-    res.status(500).json({ success: false, message: "Server Error: " + err.message });
+    res.status(500).json({ success: false, message: "Server Error!" });
   }
 });
 
 // 2. LOGIN API
 app.post('/api/auth/login', async (req, res) => {
   const { username, password } = req.body;
-  
-  if (!username || !password) {
-    return res.status(400).json({ success: false, message: "Username fi Password guutuu qabdu!" });
-  }
-
   try {
     const userRes = await pool.query('SELECT * FROM users WHERE username = $1', [username]);
     if (userRes.rows.length === 0) {
-      return res.status(400).json({ success: false, message: "Username kun hin jiru!" });
+      return res.status(400).json({ success: false, message: "Maqaan akkasii hin jiru!" });
     }
 
     const user = userRes.rows[0];
@@ -129,7 +59,7 @@ app.post('/api/auth/login', async (req, res) => {
     let validPass = false;
     try {
       validPass = await bcrypt.compare(password, user.password);
-    } catch (e) {
+    } catch(e) {
       validPass = (password === user.password);
     }
 
@@ -141,19 +71,87 @@ app.post('/api/auth/login', async (req, res) => {
     res.json({ success: true, user });
   } catch (err) {
     console.error("Login Error:", err);
-    res.status(500).json({ success: false, message: "Server Error: " + err.message });
+    res.status(500).json({ success: false, message: "Server Error!" });
   }
 });
 
-// 3. GET ALL USERS API
-app.get('/api/users', async (req, res) => {
-  try {
-    const users = await pool.query('SELECT id, username, phone, bio FROM users');
-    res.json(users.rows);
-  } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
-  }
+// ------------------- SOCKET.IO LOGIC -------------------
+
+io.on('connection', (socket) => {
+
+  // User online yeroo ta'u
+  socket.on('user-connected', async (username) => {
+    socket.username = username;
+    onlineUsers.set(username, socket.id);
+    io.emit('update-user-list', Array.from(onlineUsers.keys()));
+
+    // Missed calls yoo jiraatan cheek gochuu
+    try {
+      const missedRes = await pool.query(
+        'SELECT * FROM missed_calls WHERE receiver_username = $1 ORDER BY created_at DESC',
+        [username]
+      );
+      if (missedRes.rows.length > 0) {
+        socket.emit('missed-calls-notification', missedRes.rows);
+        // Baay'ee galmaa'an fiduuf erga maammilaaf ergamee DB keessaa dhiusuu ykn haquu
+        await pool.query('DELETE FROM missed_calls WHERE receiver_username = $1', [username]);
+      }
+    } catch (err) {
+      console.error("Missed Call Fetch Error:", err);
+    }
+  });
+
+  // Call Initiated (Voice/Video)
+  socket.on('start-call', async (data) => {
+    const { toUsername, type, signalData } = data;
+    const targetSocketId = onlineUsers.get(toUsername);
+
+    if (targetSocketId) {
+      // Receiver ONLINE jira -> Call alert ergi
+      io.to(targetSocketId).emit('incoming-call', {
+        from: socket.username,
+        type,
+        signalData
+      });
+    } else {
+      // Receiver OFFLINE jira -> DB irratti Missed Call galmeessi
+      try {
+        await pool.query(
+          'INSERT INTO missed_calls (caller_username, receiver_username, call_type) VALUES ($1, $2, $3)',
+          [socket.username, toUsername, type]
+        );
+        socket.emit('call-status', { 
+          message: `@${toUsername} offline jira. Missed Call akka arguuf galmeeffameera!` 
+        });
+      } catch (err) {
+        console.error("Save Missed Call Error:", err);
+      }
+    }
+  });
+
+  // Post creation
+  socket.on('create-post', async (data) => {
+    try {
+      const res = await pool.query(
+        'INSERT INTO posts (username, content, media_url, media_type, approved) VALUES ($1, $2, $3, $4, TRUE) RETURNING *',
+        [data.username, data.content, data.mediaUrl || null, data.mediaType || null]
+      );
+      io.emit('new-post-created', res.rows[0]);
+    } catch (err) {
+      console.error("Post Creation Error:", err);
+    }
+  });
+
+  // Disconnect
+  socket.on('disconnect', () => {
+    if (socket.username) {
+      onlineUsers.delete(socket.username);
+      io.emit('update-user-list', Array.from(onlineUsers.keys()));
+    }
+  });
 });
 
-const PORT = process.env.PORT || 10000;
-server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
