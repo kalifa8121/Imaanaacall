@@ -21,6 +21,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 async function initDB() {
   try {
+    // 1. Table uumuu (yoo hin jirre ta'e)
     await pool.query(`
       CREATE TABLE IF NOT EXISTS users (
         id SERIAL PRIMARY KEY,
@@ -66,11 +67,22 @@ async function initDB() {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
-    console.log("Database initialized successfully.");
+
+    // 2. Table users uumamaa waan tureef kolamoota haaraa dabaluu
+    await pool.query(`
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR(20);
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS bio TEXT;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar TEXT;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS is_vip BOOLEAN DEFAULT FALSE;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS banned_until TIMESTAMP DEFAULT NULL;
+    `);
+
+    console.log("Database initialized & schema updated successfully.");
   } catch (err) {
     console.error("DB Initialization Error:", err);
   }
 }
+
 initDB();
 
 const activeUsers = {}; // socket.id -> { username, id }
