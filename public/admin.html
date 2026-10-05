@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="om">
+<head>
+  <meta charset="UTF-8">
+  <title>Admin Dashboard - To'annoo</title>
+  <style>
+    body { font-family: sans-serif; background: #0b141a; color: white; padding: 20px; }
+    .card { background: #111b21; border: 1px solid #2a3942; padding: 15px; margin-bottom: 15px; border-radius: 8px; }
+    .btn { padding: 6px 12px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
+    .btn-green { background: #00a884; color: white; }
+    .btn-danger { background: #ea4335; color: white; }
+  </style>
+</head>
+<body>
+
+  <h2>Admin Dashboard (To'annoo Guutuu)</h2>
+
+  <div class="card">
+    <h3>Post Pendy Jiran (Approve / Delete)</h3>
+    <div id="pending-posts"></div>
+  </div>
+
+  <script>
+    const token = 'admin123'; // Environment Passkey keessan
+
+    async function loadPending() {
+      const res = await fetch('/api/admin/pending-posts');
+      const posts = await res.json();
+      const div = document.getElementById('pending-posts');
+      div.innerHTML = '';
+      posts.forEach(p => {
+        div.innerHTML += `
+          <div style="border-bottom:1px solid #333; padding:10px;">
+            <b>@${p.username}:</b> ${p.content} <br>
+            <button class="btn btn-green" onclick="approve(${p.id})">Approve (Raggaasisi)</button>
+            <button class="btn btn-danger" onclick="del(${p.id})">Delete (Haqi)</button>
+          </div>`;
+      });
+    }
+
+    async function approve(postId) {
+      await fetch('/api/admin/approve-post', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({postId}) });
+      loadPending();
+    }
+
+    async function del(postId) {
+      await fetch('/api/admin/delete-post', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({postId}) });
+      loadPending();
+    }
+
+    loadPending();
+  </script>
+</body>
+</html>
