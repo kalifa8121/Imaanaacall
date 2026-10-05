@@ -1,115 +1,128 @@
 const socket = io();
-let currentUser = '';
-let incomingCallData = null;
-let peer = null;
-let localStream = null;
+let me = '', currentSocketId = '', peer = null, incomingData = null, localStream = null;
 
-const ringtone = document.getElementById('ringtone-audio');
-
-function register() {
-  const username = document.getElementById('username-input').value.trim();
-  if (!username) return alert('Maqaa galchaa!');
-  currentUser = username;
+function login() {
+  const username = document.getElementById('username-in').value.trim();
+  if(!username) return alert("Maqaa galchaa!");
+  me = username;
   socket.emit('register-user', username);
-  document.getElementById('login-section').style.display = 'none';
-  document.getElementById('app-section').style.display = 'block';
-  document.getElementById('status-badge').innerText = '● Online';
+  document.getElementById('login-sec').style.display = 'none';
+  document.getElementById('main-sec').style.display = 'block';
+  loadPosts();
 }
 
-socket.on('update-user-list', (users) => {
-  const container = document.getElementById('users-container');
-  container.innerHTML = '';
-  
-  const otherUsers = users.filter(u => u.id !== socket.id);
-  if (otherUsers.length === 0) {
-    container.innerHTML = '<small style="color: #8696a0;">Maammilli biraa onlaayinii hin jiru...</small>';
-    return;
-  }
+socket.on('banned-notice', () => {
+  alert("Akkasumas accountin keessan Blocked godhameera!");
+  location.reload();
+});
 
-  otherUsers.forEach(u => {
-    const div = document.createElement('div');
-    div.className = 'user-card';
-    div.innerHTML = `
-      <span>${u.username}</span>
-      <button class="btn btn-call" onclick="startCall('${u.id}')">Bilbili 📞</button>
-    `;
-    container.appendChild(div);
+socket.on('update-user-list', (users) => {
+  const div = document.getElementById('users-list');
+  div.innerHTML = '';
+  users.filter(u => u.username !== me).forEach(u => {
+    div.innerHTML += `
+      <div class="user-item">
+        <span><b>${u.username}</b> ${u.is_vip ? '⭐ VIP' : ''}</span>
+        <div>
+          <button class="btn btn-green" onclick="makeCall('${u.id}', false)">Voice 📞</button>
+          <button class="btn btn-blue" onclick="makeCall('${u.id}', true)">Video 📹</button>
+        </div>
+      </div>`;
   });
 });
 
-function sendMessage() {
-  const msgInput = document.getElementById('msg-input');
-  const message = msgInput.value.trim();
-  if (!message) return;
-
-  socket.emit('send-message', { username: currentUser, message });
-  msgInput.value = '';
-}
-
-socket.on('new-message', (data) => {
-  const chatBox = document.getElementById('chat-box');
-  const div = document.createElement('div');
-  div.className = 'msg-bubble';
-  div.innerHTML = `<div class="msg-user">${data.username}</div><div>${data.message}</div>`;
-  chatBox.appendChild(div);
-  chatBox.scrollTop = chatBox.scrollHeight;
-});
-
-// START CALL
-async function startCall(userToCall) {
+async function makeCall(userToCall, isVideo) {
   try {
-    localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: isVideo });
     peer = new SimplePeer({ initiator: true, trickle: false, stream: localStream });
 
-    peer.on('signal', (signalData) => {
-      socket.emit('call-user', { userToCall, signalData, callerName: currentUser });
+    peer.on('signal', data => {
+      socket.emit('call-user', { userToCall, signalData: data, callerName: me, isVideo });
     });
 
-    peer.on('stream', (remoteStream) => {
-      const audio = new Audio();
-      audio.srcObject = remoteStream;
-      audio.play();
-    });
-  } catch (err) {
-    alert("Microphone permission required to call.");
-  }
+    peer.on('stream', stream => attachMediaStream(stream, isVideo));
+  } catch(e) { alert("Mic/Camera Permission Required!"); }
 }
 
-// INCOMING CALL
-socket.on('incoming-call', (data) => {
-  incomingCallData = data;
-  document.getElementById('caller-name-text').innerText = `${data.callerName} bilbilaa jira...`;
+socket.on('incoming-call', data => {
+  incomingData = data;
+  document.getElementById('caller-txt').innerText = `${data.callerName} calls (${data.isVideo ? 'Video' : 'Voice'})...`;
   document.getElementById('call-modal').style.display = 'flex';
-  ringtone.play().catch(e => console.log("Audio waiting for user click"));
 });
 
 async function acceptCall() {
-  ringtone.pause();
-  ringtone.currentTime = 0;
   document.getElementById('call-modal').style.display = 'none';
-
-  localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+  localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: incomingData.isVideo });
   peer = new SimplePeer({ initiator: false, trickle: false, stream: localStream });
 
-  peer.on('signal', (signal) => {
-    socket.emit('accept-call', { signal, to: incomingCallData.from });
-  });
-
-  peer.on('stream', (remoteStream) => {
-    const audio = new Audio();
-    audio.srcObject = remoteStream;
-    audio.play();
-  });
-
-  peer.signal(incomingCallData.signal);
+  peer.on('signal', signal => socket.emit('accept-call', { signal, to: incomingData.from }));
+  peer.on('stream', stream => attachMediaStream(stream, incomingData.isVideo));
+  peer.signal(incomingData.signal);
 }
 
 function rejectCall() {
-  ringtone.pause();
-  ringtone.currentTime = 0;
   document.getElementById('call-modal').style.display = 'none';
-  socket.emit('reject-call', { to: incomingCallData.from });
+  socket.emit('reject-call', { to: incomingData.from });
 }
 
-socket.on('call-accepted', (signal) => peer.signal(signal));
-socket.on('call-rejected', () => alert('Bilbilli reject godhameera.'));
+socket.on('call-accepted', signal => peer.signal(signal));
+
+function attachMediaStream(stream, isVideo) {
+  const elem = document.createElement(isVideo ? 'video' : 'audio');
+  elem.srcObject = stream;
+  elem.autoplay = true;
+  document.body.appendChild(elem);
+}
+
+// POSTS
+function submitPost() {
+  const content = document.getElementById('post-text').value;
+  const file = document.getElementById('post-file').files[0];
+
+  if(file) {
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      const type = file.type.startsWith('image') ? 'image' : file.type.startsWith('video') ? 'video' : 'audio';
+      socket.emit('create-post', { username: me, content, mediaUrl: e.target.result, mediaType: type });
+    };
+    reader.readAsDataURL(file);
+  } else {
+    socket.emit('create-post', { username: me, content });
+  }
+}
+
+socket.on('post-pending-notice', () => alert('Post keessan Admin biratti ergameera, ilaalee erga approve godhee booda ni dhihaata.'));
+
+socket.on('new-post', post => renderPost(post, true));
+
+async function loadPosts() {
+  const res = await fetch('/api/posts');
+  const posts = await res.json();
+  posts.forEach(p => renderPost(p, false));
+}
+
+function renderPost(p, prepend) {
+  const feed = document.getElementById('posts-feed');
+  const div = document.createElement('div');
+  div.className = 'post';
+  let mediaHtml = '';
+  if(p.media_url) {
+    if(p.media_type === 'image') mediaHtml = `<img src="${p.media_url}">`;
+    else if(p.media_type === 'video') mediaHtml = `<video src="${p.media_url}" controls></video>`;
+    else mediaHtml = `<audio src="${p.media_url}" controls></audio>`;
+  }
+  div.innerHTML = `
+    <b>@${p.username}</b>
+    <p>${p.content || ''}</p>
+    ${mediaHtml}
+    <div style="margin-top:8px;">
+      <button class="btn btn-green" onclick="socket.emit('like-post', ${p.id})">👍 Like (<span id="likes-${p.id}">${p.likes || 0}</span>)</button>
+      <button class="btn btn-blue" onclick="navigator.share({title:'ImaanaaCall Post', url: window.location.href})">🔗 Share</button>
+    </div>`;
+  if(prepend) feed.prepend(div); else feed.appendChild(div);
+}
+
+socket.on('update-likes', id => {
+  const el = document.getElementById(`likes-${id}`);
+  if(el) el.innerText = parseInt(el.innerText) + 1;
+});
