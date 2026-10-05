@@ -1,124 +1,137 @@
 const socket = io();
-let currentUser = null;
+let currentUser = null, isSignup = false, currentStream = null, peer = null, incomingData = null;
+const ringtone = document.getElementById('ringtone');
 
-// Page Load - User Check
-window.onload = () => {
-  const savedUser = localStorage.getItem('imaanaa_user');
-  if (savedUser) {
-    currentUser = JSON.parse(savedUser);
-    showMainApp();
-  }
-};
-
-function toggleAuth(type) {
-  if (type === 'signup') {
-    document.getElementById('login-card').style.display = 'none';
-    document.getElementById('signup-card').style.display = 'block';
-  } else {
-    document.getElementById('signup-card').style.display = 'none';
-    document.getElementById('login-card').style.display = 'block';
-  }
+function toggleAuthMode() {
+  isSignup = !isSignup;
+  document.getElementById('auth-title').innerText = isSignup ? 'Signup' : 'Login';
+  document.getElementById('auth-btn').innerText = isSignup ? 'Signup' : 'Login';
 }
 
-// Signup (UNTOUCHED)
-async function handleSignup() {
-  const username = document.getElementById('signup-username').value.trim();
-  const password = document.getElementById('signup-password').value.trim();
-  const phone = document.getElementById('signup-phone').value.trim();
+async function handleAuth() {
+  const username = document.getElementById('auth-username').value;
+  const password = document.getElementById('auth-password').value;
+  const phone = document.getElementById('auth-phone').value;
+  const bio = document.getElementById('auth-bio').value;
 
-  if (!username || !password) {
-    alert("Maqaa fi Password galchaa!");
-    return;
-  }
+  const endpoint = isSignup ? '/api/auth/signup' : '/api/auth/login';
+  const res = await fetch(endpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password, phone, bio })
+  });
 
-  try {
-    const res = await fetch('/api/auth/signup', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password, phone })
-    });
-    const data = await res.json();
+  const data = await res.json();
+  if(!data.success) return alert(data.message);
 
-    if (data.success) {
-      currentUser = data.user;
-      localStorage.setItem('imaanaa_user', JSON.stringify(currentUser));
-      showMainApp();
-    } else {
-      alert(data.message);
-    }
-  } catch (err) {
-    alert("Network Error!");
-  }
+  currentUser = data.user;
+  document.getElementById('auth-sec').style.display = 'none';
+  document.getElementById('app-sec').style.display = 'block';
+
+  document.getElementById('user-head-sec').innerHTML = `
+    <b>@${currentUser.username}</b> 
+    <button onclick="logout()" class="btn btn-danger" style="width:auto; padding:5px 10px;">Logout</button>`;
+
+  socket.emit('register-user', currentUser.username);
+  loadPosts();
 }
 
-// Login (UNTOUCHED)
-async function handleLogin() {
-  const username = document.getElementById('login-username').value.trim();
-  const password = document.getElementById('login-password').value.trim();
-
-  if (!username || !password) {
-    alert("Maqaa fi Password galchaa!");
-    return;
-  }
-
-  try {
-    const res = await fetch('/api/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password })
-    });
-    const data = await res.json();
-
-    if (data.success) {
-      currentUser = data.user;
-      localStorage.setItem('imaanaa_user', JSON.stringify(currentUser));
-      showMainApp();
-    } else {
-      alert(data.message);
-    }
-  } catch (err) {
-    alert("Network Error!");
-  }
-}
-
-// Logout
-function handleLogout() {
-  localStorage.removeItem('imaanaa_user');
+function logout() {
   location.reload();
 }
 
-// Show Main App Screen
-function showMainApp() {
-  document.getElementById('auth-section').style.display = 'none';
-  document.getElementById('app-section').style.display = 'block';
-  document.getElementById('user-display').style.display = 'flex';
-  document.getElementById('current-username').innerText = '@' + currentUser.username;
+async function saveProfile() {
+  const phone = document.getElementById('edit-phone').value;
+  const bio = document.getElementById('edit-bio').value;
 
-  socket.emit('user-connected', currentUser.username);
+  await fetch('/api/profile/update', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: currentUser.username, phone, bio, avatar: '' })
+  });
+  alert("Profile Updated!");
 }
 
-// Offline/Online Users Call Function
-function makeCall(targetUsername, type) {
-  alert(`Waamichi ${type.toUpperCase()} gara @${targetUsername} tti jalqabeera...`);
-  socket.emit('start-call', {
-    toUsername: targetUsername,
-    type: type
-  });
-}
+socket.on('update-user-list', users => {
+  const container = document.getElementById('users-list');
+  container.innerHTML = '';
 
-socket.on('call-status', data => alert(data.message));
-socket.on('incoming-call', data => alert(`Waamicha ${data.type.toUpperCase()} @${data.from} irraa isiniif dhufaa jira!`));
-
-// Missed Calls Alert (Yeroo Online Seenan)
-socket.on('missed-calls-notification', missedCalls => {
-  let msg = "Yeroo isin offline turtan waamicha isin jala darbe:\n";
-  missedCalls.forEach(call => {
-    msg += `- Waamicha ${call.call_type.toUpperCase()} nama @${call.caller_username} irraa!\n`;
+  users.filter(u => u.username !== currentUser.username).forEach(u => {
+    container.innerHTML += `
+      <div class="user-list-item">
+        <div>
+          <span class="status-dot ${u.isOnline ? 'online' : 'offline'}"></span>
+          <b>@${u.username}</b>
+        </div>
+        <div>
+          ${u.isOnline ? `
+            <button class="btn btn-green" style="width:auto; padding:5px;" onclick="startCall('${u.username}', false)">Voice 📞</button>
+            <button class="btn btn-primary" style="width:auto; padding:5px;" onclick="startCall('${u.username}', true)">Video 📹</button>
+          ` : '<small>Offline</small>'}
+        </div>
+      </div>`;
   });
-  alert(msg);
 });
 
-// Post Submit
+// WEBRTC CALL ENGINE LOGIC
+async function startCall(userToCall, isVideo) {
+  try {
+    currentStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: isVideo });
+    document.getElementById('local-video').srcObject = currentStream;
+    document.getElementById('call-screen').style.display = 'block';
+
+    peer = new SimplePeer({ initiator: true, trickle: false, stream: currentStream });
+
+    peer.on('signal', signalData => {
+      socket.emit('call-user', { userToCall, signalData, callerName: currentUser.username, isVideo });
+    });
+
+    peer.on('stream', stream => {
+      document.getElementById('remote-video').srcObject = stream;
+    });
+  } catch(e) { alert("Camera/Microphone Permission Gaafatamaa!"); }
+}
+
+socket.on('incoming-call', data => {
+  incomingData = data;
+  document.getElementById('caller-name-txt').innerText = `${data.callerName} is calling...`;
+  document.getElementById('call-modal').style.display = 'flex';
+  ringtone.play().catch(e => console.log(e));
+});
+
+async function acceptCall() {
+  ringtone.pause();
+  document.getElementById('call-modal').style.display = 'none';
+  document.getElementById('call-screen').style.display = 'block';
+
+  currentStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: incomingData.isVideo });
+  document.getElementById('local-video').srcObject = currentStream;
+
+  peer = new SimplePeer({ initiator: false, trickle: false, stream: currentStream });
+
+  peer.on('signal', signal => socket.emit('accept-call', { signal, to: incomingData.from }));
+  peer.on('stream', stream => {
+    document.getElementById('remote-video').srcObject = stream;
+  });
+
+  peer.signal(incomingData.signal);
+}
+
+function rejectCall() {
+  ringtone.pause();
+  document.getElementById('call-modal').style.display = 'none';
+  socket.emit('reject-call', { to: incomingData.from });
+}
+
+socket.on('call-accepted', signal => peer.signal(signal));
+socket.on('call-failed-offline', () => { alert("Maammilli offline waan ta'eef bilbilamuu hin dandeenye."); endCall(); });
+
+function endCall() {
+  if (peer) peer.destroy();
+  if (currentStream) currentStream.getTracks().forEach(t => t.stop());
+  document.getElementById('call-screen').style.display = 'none';
+}
+
 function submitPost() {
   const content = document.getElementById('post-text').value;
   const file = document.getElementById('post-file').files[0];
@@ -128,25 +141,30 @@ function submitPost() {
     reader.onload = e => {
       const type = file.type.startsWith('video') ? 'video' : 'image';
       socket.emit('create-post', { username: currentUser.username, content, mediaUrl: e.target.result, mediaType: type });
-      document.getElementById('post-text').value = '';
     };
     reader.readAsDataURL(file);
-  } else if (content.trim() !== '') {
+  } else {
     socket.emit('create-post', { username: currentUser.username, content });
-    document.getElementById('post-text').value = '';
   }
 }
 
-// Feed realtime update
-socket.on('new-post-created', post => {
-  const feed = document.getElementById('feed-container');
-  if (!feed) return;
-  const postHtml = `
-    <div class="post">
-      <b>@${post.username}</b>
-      <p>${post.content || ''}</p>
-      ${post.media_type === 'image' ? `<img src="${post.media_url}">` : ''}
-      ${post.media_type === 'video' ? `<video src="${post.media_url}" controls></video>` : ''}
-    </div>`;
-  feed.insertAdjacentHTML('afterbegin', postHtml);
+socket.on('post-submitted-silent', post => {
+  document.getElementById('post-text').value = '';
+  alert("Post Review f ka'ameera, battalatti ilaalama.");
 });
+
+async function loadPosts() {
+  const res = await fetch('/api/posts');
+  const posts = await res.json();
+  const feed = document.getElementById('feed-container');
+  feed.innerHTML = '';
+  posts.forEach(p => {
+    feed.innerHTML += `
+      <div class="post">
+        <b>@${p.username}</b>
+        <p>${p.content || ''}</p>
+        ${p.media_type === 'image' ? `<img src="${p.media_url}">` : ''}
+        ${p.media_type === 'video' ? `<video src="${p.media_url}" controls></video>` : ''}
+      </div>`;
+  });
+}
