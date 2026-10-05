@@ -1,219 +1,170 @@
 const socket = io();
-let me = '', currentStream = null, peer = null, incomingData = null, mediaRecorder = null, recordedChunks = [];
-const ringtone = document.getElementById('ringtone-audio');
+let currentUser = null, isSignup = false, currentStream = null, peer = null, incomingData = null;
+const ringtone = document.getElementById('ringtone');
 
-function showVipInfo() {
-  alert("VIP Banachuuf Lakkoofsa Bilbilaa: 0920689815 ykn Telegram: @Kaliifo_admin contact godhaa!");
+function toggleAuthMode() {
+  isSignup = !isSignup;
+  document.getElementById('auth-title').innerText = isSignup ? 'Signup' : 'Login';
+  document.getElementById('auth-btn').innerText = isSignup ? 'Signup' : 'Login';
 }
 
-async function registerAndLogin() {
-  const username = document.getElementById('username-in').value.trim();
-  const phone = document.getElementById('phone-in').value.trim();
-  const bio = document.getElementById('bio-in').value.trim();
+async function handleAuth() {
+  const username = document.getElementById('auth-username').value;
+  const password = document.getElementById('auth-password').value;
+  const phone = document.getElementById('auth-phone').value;
+  const bio = document.getElementById('auth-bio').value;
 
-  if(!username) return alert("Maqaa galchaa!");
-
-  me = username;
-
-  await fetch('/api/profile/save', {
+  const endpoint = isSignup ? '/api/auth/signup' : '/api/auth/login';
+  const res = await fetch(endpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, phone, bio, avatar: '' })
+    body: JSON.stringify({ username, password, phone, bio })
   });
 
-  socket.emit('register-user', username);
-  document.getElementById('login-sec').style.display = 'none';
-  document.getElementById('main-sec').style.display = 'block';
+  const data = await res.json();
+  if(!data.success) return alert(data.message);
+
+  currentUser = data.user;
+  document.getElementById('auth-sec').style.display = 'none';
+  document.getElementById('app-sec').style.display = 'block';
+
+  document.getElementById('user-head-sec').innerHTML = `
+    <b>@${currentUser.username}</b> 
+    <button onclick="logout()" class="btn btn-danger" style="width:auto; padding:5px 10px;">Logout</button>`;
+
+  socket.emit('register-user', currentUser.username);
   loadPosts();
 }
 
-socket.on('banned-notice', msg => alert(msg));
+function logout() {
+  location.reload();
+}
 
-socket.on('missed-calls-notice', calls => {
-  calls.forEach(c => alert(`⚠️ Missed ${c.call_type} call from @${c.caller}`));
-});
+async function saveProfile() {
+  const phone = document.getElementById('edit-phone').value;
+  const bio = document.getElementById('edit-bio').value;
+
+  await fetch('/api/profile/update', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: currentUser.username, phone, bio, avatar: '' })
+  });
+  alert("Profile Updated!");
+}
 
 socket.on('update-user-list', users => {
-  const container = document.getElementById('users-container');
+  const container = document.getElementById('users-list');
   container.innerHTML = '';
 
-  users.filter(u => u.username !== me).forEach(u => {
-    const statusClass = u.isOnline ? 'online' : 'offline';
-    const statusText = u.isOnline ? 'Online' : 'Offline';
-    
+  users.filter(u => u.username !== currentUser.username).forEach(u => {
     container.innerHTML += `
-      <div class="user-row">
+      <div class="user-list-item">
         <div>
-          <span class="status-dot ${statusClass}"></span>
-          <b>@${u.username}</b> <small style="color:#8696a0;">(${statusText})</small>
+          <span class="status-dot ${u.isOnline ? 'online' : 'offline'}"></span>
+          <b>@${u.username}</b>
         </div>
         <div>
           ${u.isOnline ? `
-            <button class="btn btn-green" onclick="makeCall('${u.username}', false)">Voice 📞</button>
-            <button class="btn btn-blue" onclick="makeCall('${u.username}', true)">Video 📹</button>
-          ` : '<small style="color:#ea4335;">Not Available</small>'}
+            <button class="btn btn-green" style="width:auto; padding:5px;" onclick="startCall('${u.username}', false)">Voice 📞</button>
+            <button class="btn btn-primary" style="width:auto; padding:5px;" onclick="startCall('${u.username}', true)">Video 📹</button>
+          ` : '<small>Offline</small>'}
         </div>
       </div>`;
   });
 });
 
-async function makeCall(userToCall, isVideo) {
+// WEBRTC CALL ENGINE LOGIC
+async function startCall(userToCall, isVideo) {
   try {
     currentStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: isVideo });
+    document.getElementById('local-video').srcObject = currentStream;
+    document.getElementById('call-screen').style.display = 'block';
+
     peer = new SimplePeer({ initiator: true, trickle: false, stream: currentStream });
 
     peer.on('signal', signalData => {
-      socket.emit('call-user', { userToCall, signalData, callerName: me, isVideo });
+      socket.emit('call-user', { userToCall, signalData, callerName: currentUser.username, isVideo });
     });
 
-    peer.on('stream', stream => attachMediaStream(stream, isVideo));
-  } catch(e) { alert("Microphone/Camera permission required!"); }
+    peer.on('stream', stream => {
+      document.getElementById('remote-video').srcObject = stream;
+    });
+  } catch(e) { alert("Camera/Microphone Permission Gaafatamaa!"); }
 }
 
 socket.on('incoming-call', data => {
   incomingData = data;
-  document.getElementById('caller-txt').innerText = `${data.callerName} is calling (${data.isVideo ? 'Video' : 'Voice'})...`;
+  document.getElementById('caller-name-txt').innerText = `${data.callerName} is calling...`;
   document.getElementById('call-modal').style.display = 'flex';
   ringtone.play().catch(e => console.log(e));
 });
 
 async function acceptCall() {
-  ringtone.pause(); ringtone.currentTime = 0;
+  ringtone.pause();
   document.getElementById('call-modal').style.display = 'none';
+  document.getElementById('call-screen').style.display = 'block';
 
   currentStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: incomingData.isVideo });
+  document.getElementById('local-video').srcObject = currentStream;
+
   peer = new SimplePeer({ initiator: false, trickle: false, stream: currentStream });
 
   peer.on('signal', signal => socket.emit('accept-call', { signal, to: incomingData.from }));
-  peer.on('stream', stream => attachMediaStream(stream, incomingData.isVideo));
+  peer.on('stream', stream => {
+    document.getElementById('remote-video').srcObject = stream;
+  });
+
   peer.signal(incomingData.signal);
 }
 
 function rejectCall() {
-  ringtone.pause(); ringtone.currentTime = 0;
+  ringtone.pause();
   document.getElementById('call-modal').style.display = 'none';
   socket.emit('reject-call', { to: incomingData.from });
 }
 
 socket.on('call-accepted', signal => peer.signal(signal));
-socket.on('call-failed-offline', () => alert("Maammilli offline waan ta'eef Missed Call ergameera."));
+socket.on('call-failed-offline', () => { alert("Maammilli offline waan ta'eef bilbilamuu hin dandeenye."); endCall(); });
 
-function attachMediaStream(stream, isVideo) {
-  const elem = document.createElement(isVideo ? 'video' : 'audio');
-  elem.srcObject = stream;
-  elem.autoplay = true;
-  document.body.appendChild(elem);
-}
-
-// LIVE CAMERA/VOICE RECORDING
-async function startLiveRecord() {
-  const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-  document.getElementById('live-preview').style.display = 'block';
-  document.getElementById('live-preview').srcObject = stream;
-  document.getElementById('stop-rec-btn').style.display = 'inline-block';
-
-  recordedChunks = [];
-  mediaRecorder = new MediaRecorder(stream);
-  mediaRecorder.ondataavailable = e => { if (e.data.size > 0) recordedChunks.push(e.data); };
-  mediaRecorder.start();
-}
-
-function stopLiveRecord() {
-  mediaRecorder.stop();
-  document.getElementById('live-preview').style.display = 'none';
-  document.getElementById('stop-rec-btn').style.display = 'none';
-  
-  mediaRecorder.onstop = () => {
-    const blob = new Blob(recordedChunks, { type: 'video/webm' });
-    const reader = new FileReader();
-    reader.onload = e => {
-      socket.emit('create-post', { username: me, content: "Live Recorded Video", mediaUrl: e.target.result, mediaType: 'video' });
-    };
-    reader.readAsDataURL(blob);
-  };
+function endCall() {
+  if (peer) peer.destroy();
+  if (currentStream) currentStream.getTracks().forEach(t => t.stop());
+  document.getElementById('call-screen').style.display = 'none';
 }
 
 function submitPost() {
   const content = document.getElementById('post-text').value;
   const file = document.getElementById('post-file').files[0];
 
-  if(file) {
+  if (file) {
     const reader = new FileReader();
     reader.onload = e => {
-      const type = file.type.startsWith('image') ? 'image' : file.type.startsWith('video') ? 'video' : 'audio';
-      socket.emit('create-post', { username: me, content, mediaUrl: e.target.result, mediaType: type });
+      const type = file.type.startsWith('video') ? 'video' : 'image';
+      socket.emit('create-post', { username: currentUser.username, content, mediaUrl: e.target.result, mediaType: type });
     };
     reader.readAsDataURL(file);
   } else {
-    socket.emit('create-post', { username: me, content });
+    socket.emit('create-post', { username: currentUser.username, content });
   }
 }
 
 socket.on('post-submitted-silent', post => {
   document.getElementById('post-text').value = '';
-  renderPost(post, true, true);
+  alert("Post Review f ka'ameera, battalatti ilaalama.");
 });
-
-socket.on('new-post', post => renderPost(post, true, false));
 
 async function loadPosts() {
   const res = await fetch('/api/posts');
   const posts = await res.json();
-  posts.forEach(p => renderPost(p, false, false));
+  const feed = document.getElementById('feed-container');
+  feed.innerHTML = '';
+  posts.forEach(p => {
+    feed.innerHTML += `
+      <div class="post">
+        <b>@${p.username}</b>
+        <p>${p.content || ''}</p>
+        ${p.media_type === 'image' ? `<img src="${p.media_url}">` : ''}
+        ${p.media_type === 'video' ? `<video src="${p.media_url}" controls></video>` : ''}
+      </div>`;
+  });
 }
-
-function renderPost(p, prepend, isPending) {
-  const feed = document.getElementById('posts-feed');
-  const div = document.createElement('div');
-  div.className = 'post';
-
-  let mediaHtml = '';
-  if(p.media_url) {
-    if(p.media_type === 'image') mediaHtml = `<img src="${p.media_url}">`;
-    else if(p.media_type === 'video') mediaHtml = `<video src="${p.media_url}" controls></video>`;
-    else mediaHtml = `<audio src="${p.media_url}" controls></audio>`;
-    
-    mediaHtml += `<br><a href="${p.media_url}" download="imaanaa_media" class="btn btn-secondary" style="display:inline-block; margin-top:5px; text-decoration:none;">Download 📥</a>`;
-  }
-
-  div.innerHTML = `
-    <b>@${p.username}</b> ${isPending ? '<small style="color:#ffc107;">(Pending Review)</small>' : ''}
-    <p>${p.content || ''}</p>
-    ${mediaHtml}
-    <div style="margin-top:8px;">
-      <button class="btn btn-green" onclick="socket.emit('like-post', ${p.id})">👍 Like (<span id="likes-${p.id}">${p.likes || 0}</span>)</button>
-    </div>
-    <div class="comment-box" id="comments-${p.id}"></div>
-    <div style="display:flex; gap:5px; margin-top:5px;">
-      <input type="text" id="c-input-${p.id}" placeholder="Comment barreessi..." style="margin:0;">
-      <button class="btn btn-blue" onclick="sendComment(${p.id})">Send</button>
-    </div>`;
-
-  if(prepend) feed.prepend(div); else feed.appendChild(div);
-  loadComments(p.id);
-}
-
-async function loadComments(postId) {
-  const res = await fetch(`/api/comments/${postId}`);
-  const comments = await res.json();
-  const div = document.getElementById(`comments-${postId}`);
-  div.innerHTML = '';
-  comments.forEach(c => div.innerHTML += `<div><b>@${c.username}:</b> ${c.comment}</div>`);
-}
-
-function sendComment(postId) {
-  const input = document.getElementById(`c-input-${postId}`);
-  if(!input.value) return;
-  socket.emit('add-comment', { postId, username: me, comment: input.value });
-  input.value = '';
-}
-
-socket.on('new-comment', c => {
-  const div = document.getElementById(`comments-${c.post_id}`);
-  if(div) div.innerHTML += `<div><b>@${c.username}:</b> ${c.comment}</div>`;
-});
-
-socket.on('update-likes', id => {
-  const el = document.getElementById(`likes-${id}`);
-  if(el) el.innerText = parseInt(el.innerText) + 1;
-});
