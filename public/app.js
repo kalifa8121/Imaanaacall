@@ -10,7 +10,6 @@ window.onload = () => {
   }
 };
 
-// Toggle Login & Signup UI
 function toggleAuth(type) {
   if (type === 'signup') {
     document.getElementById('login-card').style.display = 'none';
@@ -21,7 +20,7 @@ function toggleAuth(type) {
   }
 }
 
-// Signup
+// Signup (UNTOUCHED)
 async function handleSignup() {
   const username = document.getElementById('signup-username').value.trim();
   const password = document.getElementById('signup-password').value.trim();
@@ -48,11 +47,11 @@ async function handleSignup() {
       alert(data.message);
     }
   } catch (err) {
-    alert("Network Error: Express server wal-hin qunnamsiifne!");
+    alert("Network Error!");
   }
 }
 
-// Login
+// Login (UNTOUCHED)
 async function handleLogin() {
   const username = document.getElementById('login-username').value.trim();
   const password = document.getElementById('login-password').value.trim();
@@ -78,7 +77,7 @@ async function handleLogin() {
       alert(data.message);
     }
   } catch (err) {
-    alert("Network Error: Express server wal-hin qunnamsiifne!");
+    alert("Network Error!");
   }
 }
 
@@ -98,34 +97,7 @@ function showMainApp() {
   socket.emit('user-connected', currentUser.username);
 }
 
-// Online users updates
-socket.on('update-user-list', users => {
-  const container = document.getElementById('online-users-list');
-  if (!container) return;
-  
-  if (users.length === 0) {
-    container.innerHTML = "<p>Namni biraa online hin jiru.</p>";
-    return;
-  }
-
-  let html = "";
-  users.forEach(u => {
-    if (u !== currentUser.username) {
-      html += `
-        <div style="display:flex; justify-content:space-between; align-items:center; padding:6px 0; border-bottom:1px solid #eee;">
-          <span>🟢 @${u}</span>
-          <div>
-            <button onclick="makeCall('${u}', 'voice')" class="btn btn-primary" style="width:auto; padding:4px 8px;">Voice Call</button>
-            <button onclick="makeCall('${u}', 'video')" class="btn btn-primary" style="width:auto; padding:4px 8px;">Video Call</button>
-          </div>
-        </div>
-      `;
-    }
-  });
-  container.innerHTML = html || "<p>Namni biraa online hin jiru.</p>";
-});
-
-// Call logic
+// Offline/Online Users Call Function
 function makeCall(targetUsername, type) {
   alert(`Waamichi ${type.toUpperCase()} gara @${targetUsername} tti jalqabeera...`);
   socket.emit('start-call', {
@@ -137,7 +109,7 @@ function makeCall(targetUsername, type) {
 socket.on('call-status', data => alert(data.message));
 socket.on('incoming-call', data => alert(`Waamicha ${data.type.toUpperCase()} @${data.from} irraa isiniif dhufaa jira!`));
 
-// Missed Calls Notify
+// Missed Calls Alert (Yeroo Online Seenan)
 socket.on('missed-calls-notification', missedCalls => {
   let msg = "Yeroo isin offline turtan waamicha isin jala darbe:\n";
   missedCalls.forEach(call => {
