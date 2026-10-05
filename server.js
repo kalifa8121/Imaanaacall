@@ -1,102 +1,91 @@
-const express = require('express');
-const http = require('http');
-const { Server } = require('socket.io');
-const { Pool } = require('pg');
-const bcrypt = require('bcryptjs');
+const socket = io();
+let currentUser = null;
 
-const app = express();
-const server = http.createServer(app);
-const io = new Server(server, { cors: { origin: "*" } });
-
-app.use(express.json({ limit: '50mb' }));
-app.use(express.static('public'));
-
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false }
-});
-
-let onlineUsers = {};
-
-io.on('connection', (socket) => {
-  socket.on('register-user', async (username) => {
-    onlineUsers[username] = socket.id;
-    io.emit('update-user-list', Object.keys(onlineUsers));
-
-    // Missed calls kaniin unread ta'an qorachuu
-    try {
-      const missedRes = await pool.query(
-        'SELECT * FROM missed_calls WHERE receiver_username = $1 AND seen = FALSE ORDER BY created_at DESC',
-        [username]
-      );
-      if (missedRes.rows.length > 0) {
-        socket.emit('check-missed-calls', missedRes.rows);
-        await pool.query('UPDATE missed_calls SET seen = TRUE WHERE receiver_username = $1', [username]);
-      }
-    } catch (err) {
-      console.error("Missed Call Fetch Error:", err);
-    }
-  });
-
-  socket.on('create-post', async (data) => {
-    try {
-      const res = await pool.query(
-        'INSERT INTO posts (username, content, media_url, media_type, approved) VALUES ($1, $2, $3, $4, TRUE) RETURNING *',
-        [data.username, data.content, data.mediaUrl || null, data.mediaType || null]
-      );
-      io.emit('new-post-created', res.rows[0]);
-    } catch (err) {
-      console.error("Post Error:", err);
-    }
-  });
-
-  // Call Initiation & Missed Call Handling
-  socket.on('call-user', async (data) => {
-    const { callee, caller, type, signalData } = data;
-    const targetSocketId = onlineUsers[callee];
-
-    if (targetSocketId) {
-      // User-n online jira
-      io.to(targetSocketId).emit('incoming-call', { caller, type, signalData });
+function login() {
+  const u = document.getElementById('username').value;
+  const p = document.getElementById('password').value;
+  fetch('/api/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: u, password: p })
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.success) {
+      currentUser = data.user;
+      document.getElementById('login-screen').style.display = 'none';
+      document.getElementById('main-screen').style.display = 'block';
+      document.getElementById('user-display').innerText = '@' + currentUser.username;
+      
+      socket.emit('register-user', currentUser.username);
     } else {
-      // User-n offline jira -> Missed Call DB keessatti save gochuu
-      try {
-        await pool.query(
-          'INSERT INTO missed_calls (caller_username, receiver_username, call_type) VALUES ($1, $2, $3)',
-          [caller, callee, type]
-        );
-        socket.emit('call-offline-notice', { callee });
-      } catch (err) {
-        console.error("Save Missed Call Error:", err);
-      }
+      alert(data.message);
     }
   });
+}
 
-  socket.on('disconnect', () => {
-    for (let user in onlineUsers) {
-      if (onlineUsers[user] === socket.id) {
-        delete onlineUsers[user];
-        break;
-      }
-    }
-    io.emit('update-user-list', Object.keys(onlineUsers));
+// Online maammiltoota fi Offline warra jiran buttons waliin agarsiisuu
+socket.on('update-user-list', (onlineList) => {
+  const userContainer = document.getElementById('users-container');
+  if (!userContainer) return;
+  userContainer.innerHTML = '';
+
+  // Maammiltoota hunda fiduuf (Fakkeenyaaf backend irraa render godhama yoo ta'e)
+  fetch('/api/users')
+    .then(r => r.json())
+    .then(allUsers => {
+      allUsers.forEach(u => {
+        if (u.username === currentUser.username) return;
+        const isOnline = onlineList.includes(u.username);
+        
+        const item = document.createElement('div');
+        item.className = 'user-list-item';
+        item.innerHTML = `
+          <div>
+            <span class="status-dot ${isOnline ? 'online' : 'offline'}"></span>
+            <b>@${u.username}</b>
+          </div>
+          <div>
+            <button class="btn btn-green" onclick="startCall('${u.username}', 'voice')">Voice Call 📞</button>
+            <button class="btn btn-primary" onclick="startCall('${u.username}', 'video')">Video Call 📹</button>
+          </div>
+        `;
+        userContainer.appendChild(item);
+      });
+    }).catch(() => {});
+});
+
+// Call eegaluu (Online fi Offline maammilaaf)
+function startCall(targetUser, type) {
+  alert(`${targetUser} f ${type} call waamamaa jira...`);
+  socket.emit('call-user', { callee: targetUser, caller: currentUser.username, type: type });
+}
+
+// Notice yeroo user offline ta'uu jamu
+socket.on('call-offline-notice', (data) => {
+  alert(`@${data.callee} offline jira! Bilbilli keessan akka Missed Call tti isaaf ka'ameera.`);
+});
+
+// Missed calls yeroo online seenamu agarsiisuu
+socket.on('check-missed-calls', (missedCalls) => {
+  let msg = "📬 Missed Calls Haaraa Qabdu:\n\n";
+  missedCalls.forEach(c => {
+    const time = new Date(c.created_at).toLocaleTimeString();
+    msg += `• @${c.caller_username} - ${c.call_type.toUpperCase()} call (${time})\n`;
   });
+  alert(msg);
 });
 
-app.post('/api/auth/login', async (req, res) => {
-  const { username, password } = req.body;
-  try {
-    const userRes = await pool.query('SELECT * FROM users WHERE username = $1', [username]);
-    if (userRes.rows.length === 0) return res.status(400).json({ success: false, message: "User hin jiru!" });
-    const user = userRes.rows[0];
-    const validPass = await bcrypt.compare(password, user.password).catch(() => password === user.password);
-    if (!validPass) return res.status(400).json({ success: false, message: "Password dogoggora!" });
-    delete user.password;
-    res.json({ success: true, user });
-  } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
-  }
+// Realtime Post Handler
+socket.on('new-post-created', post => {
+  const feed = document.getElementById('feed-container');
+  if (!feed) return;
+  const postHtml = `
+    <div class="post">
+      <b>@${post.username}</b>
+      <p>${post.content || ''}</p>
+      ${post.media_type === 'image' ? `<img src="${post.media_url}">` : ''}
+      ${post.media_type === 'video' ? `<video src="${post.media_url}" controls></video>` : ''}
+    </div>`;
+  feed.insertAdjacentHTML('afterbegin', postHtml);
 });
-
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
