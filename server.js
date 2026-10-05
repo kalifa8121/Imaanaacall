@@ -21,7 +21,7 @@ const pool = new Pool({
 // Online Users Map: { username: socketId }
 const onlineUsers = new Map();
 
-// ------------------- API ROUTES -------------------
+// ------------------- API ROUTES (UNTOUCHED) -------------------
 
 // 1. SIGNUP API
 app.post('/api/auth/signup', async (req, res) => {
@@ -79,13 +79,12 @@ app.post('/api/auth/login', async (req, res) => {
 
 io.on('connection', (socket) => {
 
-  // User online yeroo ta'u
+  // User online yeroo ta'u (Missed call check gochuu)
   socket.on('user-connected', async (username) => {
     socket.username = username;
     onlineUsers.set(username, socket.id);
     io.emit('update-user-list', Array.from(onlineUsers.keys()));
 
-    // Missed calls yoo jiraatan cheek gochuu
     try {
       const missedRes = await pool.query(
         'SELECT * FROM missed_calls WHERE receiver_username = $1 ORDER BY created_at DESC',
@@ -93,7 +92,6 @@ io.on('connection', (socket) => {
       );
       if (missedRes.rows.length > 0) {
         socket.emit('missed-calls-notification', missedRes.rows);
-        // Baay'ee galmaa'an fiduuf erga maammilaaf ergamee DB keessaa dhiusuu ykn haquu
         await pool.query('DELETE FROM missed_calls WHERE receiver_username = $1', [username]);
       }
     } catch (err) {
@@ -101,20 +99,18 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Call Initiated (Voice/Video)
+  // Call Initiated (Voice/Video offline support)
   socket.on('start-call', async (data) => {
-    const { toUsername, type, signalData } = data;
+    const { toUsername, type } = data;
     const targetSocketId = onlineUsers.get(toUsername);
 
     if (targetSocketId) {
-      // Receiver ONLINE jira -> Call alert ergi
       io.to(targetSocketId).emit('incoming-call', {
         from: socket.username,
-        type,
-        signalData
+        type
       });
     } else {
-      // Receiver OFFLINE jira -> DB irratti Missed Call galmeessi
+      // User-n Offline jira -> Missed call galmeessi
       try {
         await pool.query(
           'INSERT INTO missed_calls (caller_username, receiver_username, call_type) VALUES ($1, $2, $3)',
