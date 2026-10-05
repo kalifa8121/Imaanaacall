@@ -3,158 +3,113 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ImaanaaCall Social</title>
-  <script src="/socket.io/socket.io.js"></script>
+  <title>Imaanaa Social Suite</title>
   <style>
-    :root {
-      --fb-blue: #0866ff;
-      --fb-bg: #f0f2f5;
-      --card-bg: #ffffff;
-      --text-color: #050505;
-    }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-      background-color: var(--fb-bg);
-      color: var(--text-color);
-      margin: 0;
-      padding-bottom: 30px;
-    }
-    .navbar {
-      background: #ffffff;
-      padding: 12px 16px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-      position: sticky;
-      top: 0;
-      z-index: 100;
-    }
-    .nav-title {
-      font-size: 20px;
-      font-weight: 800;
-      color: var(--fb-blue);
-    }
-    .container {
-      max-width: 500px;
-      margin: 12px auto;
-      padding: 0 8px;
-    }
-    .card {
-      background: var(--card-bg);
-      border-radius: 10px;
-      padding: 16px;
-      margin-bottom: 12px;
-      box-shadow: 0 1px 2px rgba(0,0,0,0.1);
-    }
-    .card h3, .card h4 {
-      margin-top: 0;
-      margin-bottom: 12px;
-    }
-    .input-field {
-      width: 100%;
-      padding: 10px 12px;
-      margin: 6px 0;
-      border: 1px solid #e4e6eb;
-      background: #f0f2f5;
-      border-radius: 8px;
-      box-sizing: border-box;
-      font-size: 14px;
-    }
-    .btn {
-      padding: 10px 14px;
-      border-radius: 8px;
-      border: none;
-      font-weight: 600;
-      font-size: 14px;
-      cursor: pointer;
-      width: 100%;
-      margin-top: 8px;
-    }
-    .btn-primary { background: var(--fb-blue); color: white; }
-    .btn-danger { background: #fa3e3e; color: white; }
-    .btn-link { background: none; color: var(--fb-blue); text-decoration: underline; }
+    :root { --fb-blue: #1877f2; --fb-bg: #f0f2f5; --card-bg: #ffffff; --text-dark: #050505; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--fb-bg); color: var(--text-dark); margin: 0; }
     
-    .post {
-      background: #ffffff;
-      border-radius: 10px;
-      padding: 14px;
-      margin-bottom: 12px;
-      box-shadow: 0 1px 2px rgba(0,0,0,0.1);
-    }
-    .post img, .post video {
-      width: 100%;
-      border-radius: 8px;
-      margin-top: 8px;
-      max-height: 400px;
-      object-fit: cover;
-    }
+    .navbar { background: #ffffff; padding: 10px 20px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 4px rgba(0,0,0,0.1); position: sticky; top: 0; z-index: 100; }
+    .nav-title { font-size: 22px; font-weight: bold; color: var(--fb-blue); }
+    
+    .container { max-width: 650px; margin: 20px auto; padding: 0 10px; }
+    .card { background: var(--card-bg); border-radius: 8px; padding: 15px; margin-bottom: 15px; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1); }
+    
+    .input-field { width: 100%; padding: 10px; margin: 6px 0; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; }
+    .btn { padding: 10px 16px; border-radius: 6px; border: none; font-weight: bold; cursor: pointer; width: 100%; margin-top: 5px; }
+    .btn-primary { background: var(--fb-blue); color: white; }
+    .btn-green { background: #42b72a; color: white; }
+    .btn-danger { background: #fa3e3e; color: white; }
+
+    .user-list-item { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee; padding: 8px 0; }
+    .status-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+    .online { background: #31a24c; }
+    .offline { background: #b0b3b8; }
+
+    .post { background: #fff; border-radius: 8px; padding: 15px; margin-bottom: 15px; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
+    .post img, .post video { width: 100%; border-radius: 8px; margin-top: 10px; }
+
+    .video-call-box { display: flex; gap: 10px; justify-content: center; background: #000; padding: 10px; border-radius: 8px; margin-top: 10px; }
+    video { width: 45%; border-radius: 6px; }
+
+    .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); justify-content: center; align-items: center; z-index: 1000; }
   </style>
 </head>
 <body>
 
   <div class="navbar">
     <div class="nav-title">ImaanaaCall Social</div>
-    <div id="user-display" style="display:none;">
-      <span id="current-username" style="font-weight:bold;"></span>
-      <button onclick="handleLogout()" class="btn btn-danger" style="width:auto; padding:5px 10px; margin:0 0 0 10px;">Logout</button>
-    </div>
+    <div id="user-head-sec"></div>
   </div>
 
   <div class="container">
-    
-    <!-- AUTHENTICATION SECTION (LOGIN / SIGNUP) -->
-    <div id="auth-section">
+
+    <!-- AUTH SECTION (SIGNUP / LOGIN) -->
+    <div id="auth-sec" class="card">
+      <h3 id="auth-title">Login</h3>
+      <input type="text" id="auth-username" class="input-field" placeholder="Username...">
+      <input type="password" id="auth-password" class="input-field" placeholder="Password...">
+      <input type="text" id="auth-phone" class="input-field" placeholder="Phone Number (Signup qofaaf)...">
+      <textarea id="auth-bio" class="input-field" placeholder="Bio (Signup qofaaf)..."></textarea>
       
-      <!-- LOGIN FORM -->
-      <div id="login-card" class="card">
-        <h3>Login</h3>
-        <input type="text" id="login-username" class="input-field" placeholder="Maqaa keessan (Username)...">
-        <input type="password" id="login-password" class="input-field" placeholder="Password...">
-        <button onclick="handleLogin()" class="btn btn-primary">Seenii (Login)</button>
-        <p style="text-align:center; margin-top:12px;">
-          Account hin qabduu? <button onclick="toggleAuth('signup')" class="btn-link" style="border:none; cursor:pointer;">Signup godhaa</button>
-        </p>
-      </div>
-
-      <!-- SIGNUP FORM -->
-      <div id="signup-card" class="card" style="display:none;">
-        <h3>Signup</h3>
-        <input type="text" id="signup-username" class="input-field" placeholder="Maqaa (Username)...">
-        <input type="password" id="signup-password" class="input-field" placeholder="Password...">
-        <input type="text" id="signup-phone" class="input-field" placeholder="Lakkoofsa Bilbilaa (Optional)...">
-        <button onclick="handleSignup()" class="btn btn-primary">Galmaa'ii (Signup)</button>
-        <p style="text-align:center; margin-top:12px;">
-          Account qabduu? <button onclick="toggleAuth('login')" class="btn-link" style="border:none; cursor:pointer;">Login godhaa</button>
-        </p>
-      </div>
-
+      <button class="btn btn-primary" id="auth-btn" onclick="handleAuth()">Login</button>
+      <p style="text-align: center; cursor: pointer; color: var(--fb-blue);" onclick="toggleAuthMode()">Account hin qabduu? Signup godha</p>
     </div>
 
-    <!-- MAIN APP SECTION -->
-    <div id="app-section" style="display:none;">
-      
-      <!-- ONLINE USERS -->
+    <!-- MAIN APP SUITE -->
+    <div id="app-sec" style="display: none;">
+
+      <!-- EDIT PROFILE MODAL / SECTION -->
       <div class="card">
-        <h4>Maammiltoota (Users)</h4>
-        <div id="online-users-list">Offline / Users loading...</div>
+        <h4>Profaayilii Edittii Gochuu</h4>
+        <input type="text" id="edit-phone" class="input-field" placeholder="Lakkoofsa Bilbilaa...">
+        <textarea id="edit-bio" class="input-field" placeholder="Bio keessan..."></textarea>
+        <button class="btn btn-green" onclick="saveProfile()">Profile Update</button>
       </div>
 
-      <!-- POST CREATION -->
+      <!-- ONLINE/OFFLINE USERS & CALL ENGINE -->
+      <div class="card">
+        <h4>Maammiltoota (Users & Direct Call)</h4>
+        <div id="users-list"></div>
+      </div>
+
+      <!-- CALL SCREEN DISPLAY -->
+      <div id="call-screen" class="card" style="display: none;">
+        <h4>Video / Voice Call Active</h4>
+        <div class="video-call-box">
+          <video id="local-video" autoplay muted></video>
+          <video id="remote-video" autoplay></video>
+        </div>
+        <button class="btn btn-danger" onclick="endCall()">End Call 🚫</button>
+      </div>
+
+      <!-- POST FEED (TIKTOK/FACEBOOK HYBRID) -->
       <div class="card">
         <h4>Maxxansa Haaraa (Post)</h4>
-        <textarea id="post-text" class="input-field" rows="3" placeholder="Maaltu jira..."></textarea>
-        <input type="file" id="post-file" accept="image/*,video/*" class="input-field">
-        <button onclick="submitPost()" class="btn btn-primary">Post Godhi</button>
+        <textarea id="post-text" class="input-field" placeholder="Maaltu jira..."></textarea>
+        <input type="file" id="post-file" class="input-field" accept="image/*,video/*">
+        <button class="btn btn-primary" onclick="submitPost()">Post Godhi</button>
       </div>
 
-      <!-- FEED -->
+      <h3>Post Feed</h3>
       <div id="feed-container"></div>
 
     </div>
 
   </div>
 
-  <script src="/app.js"></script>
+  <!-- INCOMING CALL MODAL -->
+  <div id="call-modal" class="modal">
+    <div style="background: #fff; padding: 25px; border-radius: 8px; text-align: center; width: 300px;">
+      <h3 id="caller-name-txt">Calling...</h3>
+      <button class="btn btn-green" onclick="acceptCall()">Accept 📞</button>
+      <button class="btn btn-danger" onclick="rejectCall()">Reject 🚫</button>
+    </div>
+  </div>
+
+  <audio id="ringtone" src="https://actions.google.com/sounds/v1/ambiences/office_phone_ring.ogg" loop></audio>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/simple-peer/9.11.1/simplepeer.min.js"></script>
+  <script src="app.js"></script>
 </body>
 </html>
