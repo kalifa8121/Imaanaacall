@@ -1,18 +1,14 @@
 {
-  "name": "imaanaa-social-suite",
-  "version": "2.0.0",
-  "description": "Facebook + Telegram + TikTok style social platform with Neon PostgreSQL, moderation, chat and WebRTC calls",
+  "name": "imaanaa-social",
+  "version": "3.0.0",
+  "private": true,
   "main": "server.js",
-  "scripts": {
-    "start": "node server.js"
-  },
+  "scripts": {"start":"node server.js"},
+  "engines": {"node": ">=20 <27"},
   "dependencies": {
-    "bcryptjs": "^2.4.3",
-    "express": "^4.21.2",
-    "pg": "^8.13.1",
+    "bcryptjs": "^3.0.2",
+    "express": "^5.1.0",
+    "pg": "^8.16.3",
     "socket.io": "^4.8.1"
-  },
-  "engines": {
-    "node": ">=18"
   }
 }
