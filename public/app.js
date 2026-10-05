@@ -1,120 +1,133 @@
 const socket = io();
 let currentUser = null;
 
-// LOGIN FUNCTION
-function login() {
-  const u = document.getElementById('login-username').value;
-  const p = document.getElementById('login-password').value;
+// Page Load - Login Check
+window.onload = () => {
+  const savedUser = localStorage.getItem('imaanaa_user');
+  if (savedUser) {
+    currentUser = JSON.parse(savedUser);
+    showMainApp();
+  }
+};
 
-  if (!u || !p) {
-    alert("Maaloo Username fi Password guutaa!");
+// Signup Function
+async function handleSignup() {
+  const username = document.getElementById('signup-username').value;
+  const password = document.getElementById('signup-password').value;
+  const phone = document.getElementById('signup-phone').value;
+
+  if (!username || !password) {
+    alert("Maqaa fi Password galchaa!");
     return;
   }
 
-  fetch('/api/auth/login', {
+  const res = await fetch('/api/auth/signup', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username: u, password: p })
-  })
-  .then(r => r.json())
-  .then(data => {
-    if (data.success) {
-      currentUser = data.user;
-      document.getElementById('auth-screen').style.display = 'none';
-      document.getElementById('main-screen').style.display = 'block';
-      document.getElementById('user-display').innerText = '@' + currentUser.username;
-      
-      socket.emit('register-user', currentUser.username);
-    } else {
-      alert(data.message);
-    }
-  })
-  .catch(err => {
-    alert("Network Error: " + err.message);
+    body: JSON.stringify({ username, password, phone })
   });
+  const data = await res.json();
+
+  if (data.success) {
+    currentUser = data.user;
+    localStorage.setItem('imaanaa_user', JSON.stringify(currentUser));
+    showMainApp();
+  } else {
+    alert(data.message);
+  }
 }
 
-// SIGNUP FUNCTION
-function signup() {
-  const u = document.getElementById('signup-username').value;
-  const p = document.getElementById('signup-password').value;
-  const phone = document.getElementById('signup-phone') ? document.getElementById('signup-phone').value : '';
+// Login Function
+async function handleLogin() {
+  const username = document.getElementById('login-username').value;
+  const password = document.getElementById('login-password').value;
 
-  if (!u || !p) {
-    alert("Maaloo Username fi Password guutaa!");
+  if (!username || !password) {
+    alert("Maqaa fi Password galchaa!");
     return;
   }
 
-  fetch('/api/auth/signup', {
+  const res = await fetch('/api/auth/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username: u, password: p, phone: phone })
-  })
-  .then(r => r.json())
-  .then(data => {
-    if (data.success) {
-      alert("Account'n keessan milkaa'inaan uumameera! Amma Login godhaa.");
-      // Form geeddaruu ykn Login gochuu
-      if (document.getElementById('login-username')) {
-        document.getElementById('login-username').value = u;
-      }
-    } else {
-      alert(data.message);
-    }
-  })
-  .catch(err => {
-    alert("Network Error: " + err.message);
+    body: JSON.stringify({ username, password })
+  });
+  const data = await res.json();
+
+  if (data.success) {
+    currentUser = data.user;
+    localStorage.setItem('imaanaa_user', JSON.stringify(currentUser));
+    showMainApp();
+  } else {
+    alert(data.message);
+  }
+}
+
+// Logout
+function handleLogout() {
+  localStorage.removeItem('imaanaa_user');
+  location.reload();
+}
+
+// App UI Display
+function showMainApp() {
+  document.getElementById('auth-section').style.display = 'none';
+  document.getElementById('app-section').style.display = 'block';
+  document.getElementById('current-username').innerText = '@' + currentUser.username;
+
+  // Socket Connect Notify
+  socket.emit('user-connected', currentUser.username);
+}
+
+// Call Start Handler (Voice/Video offline support included)
+function makeCall(targetUsername, type) {
+  alert(`Waamichi ${type.toUpperCase()} gara @${targetUsername} tti jalqabeera...`);
+  socket.emit('start-call', {
+    toUsername: targetUsername,
+    type: type,
+    signalData: null // WebRTC WebCam Data kanatti fufama
   });
 }
 
-// USER LIST & REALTIME EVENTS
-socket.on('update-user-list', (onlineList) => {
-  const userContainer = document.getElementById('users-container');
-  if (!userContainer) return;
-  userContainer.innerHTML = '';
-
-  fetch('/api/users')
-    .then(r => r.json())
-    .then(allUsers => {
-      allUsers.forEach(u => {
-        if (currentUser && u.username === currentUser.username) return;
-        const isOnline = onlineList.includes(u.username);
-        
-        const item = document.createElement('div');
-        item.className = 'user-list-item';
-        item.innerHTML = `
-          <div>
-            <span class="status-dot ${isOnline ? 'online' : 'offline'}"></span>
-            <b>@${u.username}</b>
-          </div>
-          <div>
-            <button class="btn btn-green" onclick="startCall('${u.username}', 'voice')">Voice Call 📞</button>
-            <button class="btn btn-primary" onclick="startCall('${u.username}', 'video')">Video Call 📹</button>
-          </div>
-        `;
-        userContainer.appendChild(item);
-      });
-    }).catch(() => {});
+// Call Notifications
+socket.on('call-status', data => {
+  alert(data.message);
 });
 
-function startCall(targetUser, type) {
-  alert(`${targetUser} f ${type} call waamamaa jira...`);
-  socket.emit('call-user', { callee: targetUser, caller: currentUser ? currentUser.username : 'User', type: type });
-}
-
-socket.on('call-offline-notice', (data) => {
-  alert(`@${data.callee} offline jira! Bilbilli keessan akka Missed Call tti isaaf ka'ameera.`);
+socket.on('incoming-call', data => {
+  alert(`Waamicha ${data.type.toUpperCase()} @${data.from} irraa isiniif dhufaa jira!`);
 });
 
-socket.on('check-missed-calls', (missedCalls) => {
-  let msg = "📬 Missed Calls Haaraa Qabdu:\n\n";
-  missedCalls.forEach(c => {
-    const time = new Date(c.created_at).toLocaleTimeString();
-    msg += `• @${c.caller_username} - ${c.call_type.toUpperCase()} call (${time})\n`;
+// Missed Calls Alert (Yeroo User-n Online Seenu)
+socket.on('missed-calls-notification', missedCalls => {
+  let msg = "Yeroo isin offline turtan waamicha isin jala darbe:\n";
+  missedCalls.forEach(call => {
+    const time = new Date(call.created_at).toLocaleTimeString();
+    msg += `- Waamicha ${call.call_type.toUpperCase()} nama @${call.caller_username} irraa (Sa'aatii: ${time})\n`;
   });
   alert(msg);
 });
 
+// Post creation
+function submitPost() {
+  const content = document.getElementById('post-text').value;
+  const file = document.getElementById('post-file').files[0];
+
+  if (file) {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const type = file.type.startsWith('video') ? 'video' : 'image';
+      socket.emit('create-post', { username: currentUser.username, content, mediaUrl: e.target.result, mediaType: type });
+      document.getElementById('post-text').value = '';
+    };
+    reader.readAsDataURL(file);
+  } else if (content.trim() !== '') {
+    socket.emit('create-post', { username: currentUser.username, content });
+    document.getElementById('post-text').value = '';
+  }
+}
+
+// Realtime Post Feed
 socket.on('new-post-created', post => {
   const feed = document.getElementById('feed-container');
   if (!feed) return;
