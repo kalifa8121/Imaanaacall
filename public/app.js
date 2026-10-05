@@ -1,9 +1,16 @@
 const socket = io();
 let currentUser = null;
 
+// LOGIN FUNCTION
 function login() {
-  const u = document.getElementById('username').value;
-  const p = document.getElementById('password').value;
+  const u = document.getElementById('login-username').value;
+  const p = document.getElementById('login-password').value;
+
+  if (!u || !p) {
+    alert("Maaloo Username fi Password guutaa!");
+    return;
+  }
+
   fetch('/api/auth/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -13,7 +20,7 @@ function login() {
   .then(data => {
     if (data.success) {
       currentUser = data.user;
-      document.getElementById('login-screen').style.display = 'none';
+      document.getElementById('auth-screen').style.display = 'none';
       document.getElementById('main-screen').style.display = 'block';
       document.getElementById('user-display').innerText = '@' + currentUser.username;
       
@@ -21,9 +28,46 @@ function login() {
     } else {
       alert(data.message);
     }
+  })
+  .catch(err => {
+    alert("Network Error: " + err.message);
   });
 }
 
+// SIGNUP FUNCTION
+function signup() {
+  const u = document.getElementById('signup-username').value;
+  const p = document.getElementById('signup-password').value;
+  const phone = document.getElementById('signup-phone') ? document.getElementById('signup-phone').value : '';
+
+  if (!u || !p) {
+    alert("Maaloo Username fi Password guutaa!");
+    return;
+  }
+
+  fetch('/api/auth/signup', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: u, password: p, phone: phone })
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.success) {
+      alert("Account'n keessan milkaa'inaan uumameera! Amma Login godhaa.");
+      // Form geeddaruu ykn Login gochuu
+      if (document.getElementById('login-username')) {
+        document.getElementById('login-username').value = u;
+      }
+    } else {
+      alert(data.message);
+    }
+  })
+  .catch(err => {
+    alert("Network Error: " + err.message);
+  });
+}
+
+// USER LIST & REALTIME EVENTS
 socket.on('update-user-list', (onlineList) => {
   const userContainer = document.getElementById('users-container');
   if (!userContainer) return;
@@ -33,7 +77,7 @@ socket.on('update-user-list', (onlineList) => {
     .then(r => r.json())
     .then(allUsers => {
       allUsers.forEach(u => {
-        if (u.username === currentUser.username) return;
+        if (currentUser && u.username === currentUser.username) return;
         const isOnline = onlineList.includes(u.username);
         
         const item = document.createElement('div');
@@ -55,7 +99,7 @@ socket.on('update-user-list', (onlineList) => {
 
 function startCall(targetUser, type) {
   alert(`${targetUser} f ${type} call waamamaa jira...`);
-  socket.emit('call-user', { callee: targetUser, caller: currentUser.username, type: type });
+  socket.emit('call-user', { callee: targetUser, caller: currentUser ? currentUser.username : 'User', type: type });
 }
 
 socket.on('call-offline-notice', (data) => {
