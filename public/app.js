@@ -405,22 +405,24 @@ async function loadUsers(forChat=false){
   }
 }
 
-async function follow(id){
-  await api(
-    "/api/follow/"+id,
-    {method:"POST"}
-  );
-
-  alert("Follow updated");
+async function follow(id) {
+  try {
+    const res = await api("/api/follow/" + id, { method: "POST" });
+    alert(res.message || "Follow updated!");
+    loadUsers(); // Frontend update gochuuf
+  } catch (e) {
+    alert("Error: " + e.message);
+  }
 }
 
-async function friend(id){
-  await api(
-    "/api/friends/request/"+id,
-    {method:"POST"}
-  );
-
-  alert("Friend request sent");
+async function friend(id) {
+  try {
+    const res = await api("/api/friends/request/" + id, { method: "POST" });
+    alert(res.message || "Friend request sent!");
+    loadUsers();
+  } catch (e) {
+    alert("Error: " + e.message);
+  }
 }
 
 async function loadRequests(){
