@@ -491,54 +491,28 @@ Saved Posts
 </section>
 
 </div>
-
-<div id="callModal"
-class="modal">
-
-<div>
-
-<h2 id="caller"></h2>
-
-<button
-class="btn green"
-onclick="acceptCall()">
-Accept
-</button>
-
-<button
-class="btn red"
-onclick="rejectCall()">
-Reject
-</button>
-
+  
+<!-- Incoming Call Modal -->
+<div id="callModal" class="modal">
+  <div>
+    <h2 id="caller">Waamicha...</h2>
+    <div class="row" style="justify-content: center; margin-top: 15px;">
+      <button class="btn green" id="acceptCallBtn" onclick="acceptCall()">Accept</button>
+      <button class="btn red" id="rejectCallBtn" onclick="rejectCall()">Reject</button>
+    </div>
+  </div>
 </div>
 
-</div>
-
-<div id="callScreen"
-class="modal">
-
-<div>
-
-<h3>
-Call
-</h3>
-
-<div class="row">
-
-<video
-id="local"
-autoplay
-muted
-style="width:48%">
-</video>
-
-<video
-id="remote"
-autoplay
-style="width:48%">
-</video>
-
+<!-- Active Call Screen Modal -->
+<div id="callScreen" class="modal">
+  <div>
+    <h3>Voice/Video Call</h3>
+    <div class="row" style="margin-bottom: 15px;">
+      <video id="local" autoplay muted playsinline style="width:48%; background: #000; border-radius: 8px;"></video>
+      <video id="remote" autoplay playsinline style="width:48%; background: #000; border-radius: 8px;"></video>
+    </div>
+    <button class="btn red" id="endCallBtn" onclick="endCall()">End Call</button>
+  </div>
 </div>
 
 <button
