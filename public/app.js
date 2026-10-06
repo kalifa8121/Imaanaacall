@@ -169,6 +169,68 @@ async function loadConfig(){
     User: <b>${c.vipUsername}</b>`;
 }
 
+// Post-oota Madaallii Eegan Load Gochuuf
+async function loadPendingPosts() {
+  if (!me?.is_admin) return;
+
+  try {
+    const pending = await api("/api/admin/pending-posts");
+    const container = $("pendingPosts");
+    if (!container) return;
+
+    if (pending.length === 0) {
+      container.innerHTML = "<p>Postii madaallii eegu hin jiru.</p>";
+      return;
+    }
+
+    container.innerHTML = pending.map(p => `
+      <div class="card post" id="pending-${p.id}">
+        <div class="row">
+          <b>@${esc(p.username)}</b>
+          <span class="small">${new Date(p.created_at).toLocaleString()}</span>
+        </div>
+        <p>${esc(p.content || "")}</p>
+        ${p.media_url ? (p.media_type === "video" ? `<video src="${p.media_url}" controls></video>` : `<img src="${p.media_url}">`) : ""}
+        <div style="margin-top:10px;">
+          <button class="btn green" onclick="approvePost(${p.id})">✅ Raggaasisi (Approve)</button>
+          <button class="btn red" onclick="rejectPost(${p.id})">❌ Haqi (Reject)</button>
+        </div>
+      </div>
+    `).join("");
+  } catch (e) {
+    console.log("Pending posts load error:", e.message);
+  }
+}
+
+// Post Raggaasisuu (Approve)
+async function approvePost(postId) {
+  try {
+    await api("/api/admin/approve-post", {
+      method: "POST",
+      body: JSON.stringify({ postId })
+    });
+    alert("Postiin ragga'ee jira!");
+    loadPendingPosts();
+    loadPosts();
+  } catch (e) {
+    alert("Error: " + e.message);
+  }
+}
+
+// Post Kufaa Gochuu (Reject)
+async function rejectPost(postId) {
+  try {
+    await api("/api/admin/delete-post", {
+      method: "POST",
+      body: JSON.stringify({ postId })
+    });
+    alert("Postiin kufaa ta'eera!");
+    loadPendingPosts();
+  } catch (e) {
+    alert("Error: " + e.message);
+  }
+}
+
 async function loadPosts(){
   const ps=
     await api("/api/posts");
