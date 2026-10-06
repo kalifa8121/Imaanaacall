@@ -235,44 +235,44 @@ function renderPost(p){
   </div>`;
 }
 
-async function createPost(){
-  const f=$("media").files[0];
+async function createPost() {
+  const content = $("postText").value.trim();
+  const fileInput = $("media");
+  const f = fileInput.files[0];
 
-  let media_url=null,
-      media_type=null;
-
-  if(f){
-    media_url=
-      await dataURL(f);
-
-    media_type=
-      f.type.startsWith("video")
-      ?"video"
-      :f.type.startsWith("audio")
-      ?"audio"
-      :"image";
+  if (!content && !f) {
+    return alert("Barruu ykn Media tokko galchaa!");
   }
 
-  try{
-    await api(
-      "/api/posts",
-      {
-        method:"POST",
-        body:JSON.stringify({
-          content:$("postText").value,
-          media_url,
-          media_type
-        })
-      }
-    );
+  let media_url = null;
+  let media_type = null;
 
-    $("postText").value="";
-    $("media").value="";
+  try {
+    if (f) {
+      media_url = await dataURL(f);
+      media_type = f.type.startsWith("video")
+        ? "video"
+        : f.type.startsWith("audio")
+        ? "audio"
+        : "image";
+    }
 
-    alert("Post submitted.");
+    await api("/api/posts", {
+      method: "POST",
+      body: JSON.stringify({
+        content,
+        media_url,
+        media_type
+      })
+    });
 
-  }catch(e){
-    alert(e.message);
+    $("postText").value = "";
+    fileInput.value = "";
+    alert("Postiin sirriitti ergameera!");
+    loadPosts(); // Feed irratti akka mul'atuuf
+
+  } catch (e) {
+    alert("Post gochuu didee jira: " + e.message);
   }
 }
 
