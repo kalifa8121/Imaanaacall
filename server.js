@@ -1162,31 +1162,62 @@ io.on("connection", socket => {
 
   socket.on("send-chat", d => {});
 
-  socket.on(
-    "call-user",
-    async data => {
-      const target =
-        [...activeUsers.entries()]
-          .find(
-            ([, u]) =>
-              u.username === data.userToCall
-          );
+ socket.on("call-user", async data => {
+    const caller = activeUsers.get(socket.id);
+    if (!caller) return;
 
-      const caller =
-        activeUsers.get(socket.id);
+    // Online akka jiru mirkaneessuuf
+    const target = [...activeUsers.entries()].find(
+      ([, u]) => u.username === data.userToCall
+    );
 
-      if (!caller) return;
+    if (target) {
+      // User-ni online yoo jiraate waamicha ergi
+      io.to(target[0]).emit("incoming-call", {
+        signal: data.signalData,
+        from: socket.id,
+        callerName: caller.username,
+        isVideo: !!data.isVideo
+      });
+    } else {
+      // User-ni offline yoo ta'e Missed Call galmeessi
+      const r = await q(
+        "SELECT id FROM users WHERE username=$1",
+        [data.userToCall]
+      );
 
-      if (target) {
-        io.to(target[0]).emit(
-          "incoming-call",
+      if (r.length) {
+        await q(
+          `INSERT INTO missed_calls
+           (caller_id,receiver_id,caller,receiver,call_type)
+           VALUES($1,$2,$3,$4,$5)`,
+          [
+            caller.userId,
+            r[0].id,
+            caller.username,
+            data.userToCall,
+            data.isVideo ? "video" : "voice"
+          ]
+        );
+
+        await notify(
+          r[0].id,
+          "missed_call",
+          "Missed call",
+          `@${caller.username} called you`,
           {
-            signal: data.signalData,
-            from: socket.id,
-            callerName: caller.username,
+            caller: caller.username,
             isVideo: !!data.isVideo
           }
         );
+      }
+
+      socket.emit("call-offline", {
+        username: data.userToCall
+      });
+    }
+  });
+        
       } else {
         const r = await q(
           "SELECT id FROM users WHERE username=$1",
