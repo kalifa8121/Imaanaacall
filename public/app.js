@@ -699,114 +699,144 @@ async function startCall(
     );
   }
 }
+// ==========================================
+// CALL & WEBRTC LOGIC (SIRREEFFAME)
+// ==========================================
 
-socket.on(
-  "incoming-call",
-  d=>{
-    incoming=d;
+// 1. Waamicha Jalqabsiisuu (Outbound Call)
+async function startCall(user, isVideo) {
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      audio: true,
+      video: isVideo
+    });
 
-    $("caller").textContent=
-      "@"+d.callerName+
-      " is calling";
+    $("local").srcObject = stream;
+    
+    // Class 'show' dabali akka Modal Flex ta'ee mul'atuuf
+    $("callScreen").classList.add("show");
 
-    $("callModal")
-      .style.display="flex";
+    peer = new SimplePeer({
+      initiator: true,
+      trickle: false,
+      stream
+    });
 
-    $("ringtone")
-      .play()
-      .catch(()=>{});
-  }
-);
-
-async function acceptCall(){
-  $("ringtone").pause();
-
-  $("callModal")
-    .style.display="none";
-
-  $("callScreen")
-    .style.display="flex";
-
-  stream=
-    await navigator
-      .mediaDevices
-      .getUserMedia({
-        audio:true,
-        video:incoming.isVideo
+    peer.on("signal", s => {
+      socket.emit("call-user", {
+        userToCall: user,
+        signalData: s,
+        callerName: me.username,
+        isVideo
       });
+    });
 
-  $("local").srcObject=
-    stream;
+    peer.on("stream", s => {
+      $("remote").srcObject = s;
+    });
 
-  peer=new SimplePeer({
-    initiator:false,
-    trickle:false,
-    stream
-  });
-
-  peer.on(
-    "signal",
-    s=>{
-      socket.emit(
-        "accept-call",
-        {
-          to:incoming.from,
-          signal:s
-        }
-      );
-    }
-  );
-
-  peer.on(
-    "stream",
-    s=>{
-      $("remote").srcObject=s;
-    }
-  );
-
-  peer.signal(
-    incoming.signal
-  );
-}
-
-function rejectCall(){
-  $("ringtone").pause();
-
-  $("callModal")
-    .style.display="none";
-
-  socket.emit(
-    "reject-call",
-    {
-      to:incoming.from
-    }
-  );
-}
-
-function endCall(){
-  if(peer)
-    peer.destroy();
-
-  if(stream)
-    stream
-      .getTracks()
-      .forEach(
-        t=>t.stop()
-      );
-
-  $("callScreen")
-    .style.display="none";
-}
-
-socket.on(
-  "call-offline",
-  d=>{
-    alert(
-      "@"+d.username+
-      " offline. Missed-call notification galmaa'e."
-    );
+  } catch (e) {
+    alert("Eyama Camera/Microphone keessan hayyamaa!");
   }
-);
+}
 
-if(token)
-  boot();
+// 2. Waamicha Ol-seenu (Incoming Call Event)
+socket.on("incoming-call", d => {
+  incoming = d;
+
+  $("caller").textContent = "@" + d.callerName + " si waamaa jira...";
+
+  // Class 'show' dabali (CSS `.modal.show` akka hojjetuuf)
+  $("callModal").classList.add("show");
+
+  const ringtone = $("ringtone");
+  if (ringtone) {
+    ringtone.play().catch(e => console.log("Audio play error:", e));
+  }
+});
+
+// 3. Waamicha Fuudhuu (Accept Call)
+async function acceptCall() {
+  hideCallModal();
+
+  $("callScreen").classList.add("show");
+
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      audio: true,
+      video: incoming.isVideo
+    });
+
+    $("local").srcObject = stream;
+
+    peer = new SimplePeer({
+      initiator: false,
+      trickle: false,
+      stream
+    });
+
+    peer.on("signal", s => {
+      socket.emit("accept-call", {
+        to: incoming.from,
+        signal: s
+      });
+    });
+
+    peer.on("stream", s => {
+      $("remote").srcObject = s;
+    });
+
+    peer.signal(incoming.signal);
+
+  } catch (e) {
+    alert("Camera/Microphone meeshaa keessaniin wal-qunnamuu didee jira.");
+    endCall();
+  }
+}
+
+// 4. Waamicha Kutuuf (Reject Call)
+function rejectCall() {
+  hideCallModal();
+
+  if (incoming && incoming.from) {
+    socket.emit("reject-call", {
+      to: incoming.from
+    });
+  }
+}
+
+// 5. Modal Waamichaa Cufuu & Ringtone Dhaabuu
+function hideCallModal() {
+  $("callModal").classList.remove("show");
+
+  const ringtone = $("ringtone");
+  if (ringtone) {
+    ringtone.pause();
+    ringtone.currentTime = 0;
+  }
+}
+
+// 6. Waamicha Xumuruu (End Call)
+function endCall() {
+  if (peer) {
+    peer.destroy();
+    peer = null;
+  }
+
+  if (stream) {
+    stream.getTracks().forEach(t => t.stop());
+    stream = null;
+  }
+
+  hideCallModal();
+  $("callScreen").classList.remove("show");
+}
+
+// 7. Waamicha Namni Dhabamnaan (Offline Call)
+socket.on("call-offline", d => {
+  alert("@" + d.username + " offline jira. Missed-call galmaa'era.");
+  endCall();
+});
+
+// Boot check
+if (token) boot();
