@@ -146,24 +146,30 @@ white-space:nowrap
 display:none!important
 }
 
-.modal{
-position:fixed;
-inset:0;
-background:#0008;
-z-index:50;
-display:none;
-align-items:center;
-justify-content:center
+.modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.75);
+  z-index: 9999; /* Elements hunda gubbaa akka ta'uuf */
+  display: none;
+  align-items: center;
+  justify-content: center;
 }
 
-.modal>div{
-background:#fff;
-border-radius:14px;
-padding:20px;
-max-width:700px;
-width:94%
+/* Modal yeroo banamu display flex akka ta'u gochuuf */
+.modal.show {
+  display: flex !important;
 }
 
+.modal > div {
+  background: #fff;
+  border-radius: 14px;
+  padding: 20px;
+  max-width: 500px;
+  width: 90%;
+  text-align: center;
+  box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+}
 .chatbox{
 height:360px;
 overflow:auto;
