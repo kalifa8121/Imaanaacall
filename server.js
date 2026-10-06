@@ -347,9 +347,10 @@ app.post("/api/auth/signup", async (req, res) => {
 
 app.post("/api/auth/login", async (req, res) => {
   try {
+    const { username, password } = req.body;
     const rows = await q(
       "SELECT * FROM users WHERE username=$1",
-      [req.body.username]
+      [username ? username.trim() : ""]
     );
 
     if (!rows.length) {
@@ -361,22 +362,15 @@ app.post("/api/auth/login", async (req, res) => {
 
     const u = rows[0];
 
-    if (
-      u.banned_until &&
-      new Date(u.banned_until) > new Date()
-    ) {
+    if (u.banned_until && new Date(u.banned_until) > new Date()) {
       return res.status(403).json({
         success: false,
         message: "Account keessan yeroo muraasaaf cufameera."
       });
     }
 
-    if (
-      !await bcrypt.compare(
-        req.body.password,
-        u.password
-      )
-    ) {
+    const isMatch = await bcrypt.compare(password, u.password);
+    if (!isMatch) {
       return res.status(400).json({
         success: false,
         message: "Password dogoggora"
@@ -384,7 +378,6 @@ app.post("/api/auth/login", async (req, res) => {
     }
 
     const t = token();
-
     sessions.set(t, u.id);
 
     res.json({
@@ -399,7 +392,6 @@ app.post("/api/auth/login", async (req, res) => {
     });
   }
 });
-
 app.post("/api/auth/logout", auth, (req, res) => {
   sessions.delete(req.token);
 
