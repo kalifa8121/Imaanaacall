@@ -18,8 +18,9 @@ const pool = new Pool({
     : false
 });
 
-app.use(express.json({ limit: "120mb" }));
-app.use(express.urlencoded({ extended: true, limit: "120mb" }));
+// Express middleware gubbaatti kana galchi
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(express.static(path.join(__dirname, "public")));
 
 const sessions = new Map();
