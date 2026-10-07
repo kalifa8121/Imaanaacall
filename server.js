@@ -18,7 +18,7 @@ const pool = new Pool({
     : false
 });
 
-// Express middleware gubbaatti kana galchi
+// Express middleware
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(express.static(path.join(__dirname, "public")));
@@ -392,6 +392,7 @@ app.post("/api/auth/login", async (req, res) => {
     });
   }
 });
+
 app.post("/api/auth/logout", auth, (req, res) => {
   sessions.delete(req.token);
 
@@ -1128,8 +1129,7 @@ io.on("connection", socket => {
         socket.id,
         {
           userId: uid,
-          username:
-            userRows[0]?.username
+          username: userRows[0]?.username
         }
       );
 
@@ -1155,17 +1155,15 @@ io.on("connection", socket => {
 
   socket.on("send-chat", d => {});
 
- socket.on("call-user", async data => {
+  socket.on("call-user", async data => {
     const caller = activeUsers.get(socket.id);
     if (!caller) return;
 
-    // Online akka jiru mirkaneessuuf
     const target = [...activeUsers.entries()].find(
       ([, u]) => u.username === data.userToCall
     );
 
     if (target) {
-      // User-ni online yoo jiraate waamicha ergi
       io.to(target[0]).emit("incoming-call", {
         signal: data.signalData,
         from: socket.id,
@@ -1173,7 +1171,6 @@ io.on("connection", socket => {
         isVideo: !!data.isVideo
       });
     } else {
-      // User-ni offline yoo ta'e Missed Call galmeessi
       const r = await q(
         "SELECT id FROM users WHERE username=$1",
         [data.userToCall]
@@ -1210,110 +1207,50 @@ io.on("connection", socket => {
       });
     }
   });
-        
-   io.on("connection", (socket) => {
-  socket.on("register-user", async ({ token: t } = {}) => {
-    const uid = sessions.get(t);
-    if (!uid) return;
 
-    const userRows = await q("SELECT username FROM users WHERE id=$1", [uid]);
-
-    activeUsers.set(socket.id, {
-      userId: uid,
-      username: userRows[0]?.username
-    });
-
-    await broadcastUsers();
-
-    const missed = await q(
-      `SELECT * FROM missed_calls
-       WHERE receiver_id=$1 AND seen=FALSE
-       ORDER BY id DESC`,
-      [uid]
-    );
-
-    if (missed.length) {
-      socket.emit("missed-calls", missed);
+  socket.on(
+    "accept-call",
+    d => {
+      io.to(d.to).emit(
+        "call-accepted",
+        d.signal
+      );
     }
-  });
+  );
 
-  socket.on("send-chat", (d) => {});
-
-  socket.on("call-user", async (data) => {
-    const caller = activeUsers.get(socket.id);
-    if (!caller) return;
-
-    const target = [...activeUsers.entries()].find(
-      ([, u]) => u.username === data.userToCall
-    );
-
-    if (target) {
-      io.to(target[0]).emit("incoming-call", {
-        signal: data.signalData,
-        from: socket.id,
-        callerName: caller.username,
-        isVideo: !!data.isVideo
-      });
-    } else {
-      const r = await q("SELECT id FROM users WHERE username=$1", [data.userToCall]);
-
-      if (r.length) {
-        await q(
-          `INSERT INTO missed_calls (caller_id, receiver_id, caller, receiver, call_type)
-           VALUES ($1, $2, $3, $4, $5)`,
-          [
-            caller.userId,
-            r[0].id,
-            caller.username,
-            data.userToCall,
-            data.isVideo ? "video" : "voice"
-          ]
-        );
-
-        await notify(
-          r[0].id,
-          "missed_call",
-          "Missed call",
-          `@${caller.username} called you`,
-          {
-            caller: caller.username,
-            isVideo: !!data.isVideo
-          }
-        );
-      }
-
-      socket.emit("call-offline", {
-        username: data.userToCall
-      });
+  socket.on(
+    "reject-call",
+    d => {
+      io.to(d.to).emit(
+        "call-rejected"
+      );
     }
-  });
+  );
 
-  socket.on("accept-call", (d) => {
-    io.to(d.to).emit("call-accepted", d.signal);
-  });
-
-  socket.on("reject-call", (d) => {
-    io.to(d.to).emit("call-rejected");
-  });
-
-  socket.on("disconnect", () => {
-    activeUsers.delete(socket.id);
-    broadcastUsers();
-  });
+  socket.on(
+    "disconnect",
+    () => {
+      activeUsers.delete(socket.id);
+      broadcastUsers();
+    }
+  );
 });
 
 async function broadcastUsers() {
   const users = await q(
-    `SELECT id, username, avatar, full_name, is_vip
+    `SELECT id,username,avatar,full_name,is_vip
      FROM users
      ORDER BY username`
   );
 
-  const online = new Set([...activeUsers.values()].map((x) => x.userId));
+  const online = new Set(
+    [...activeUsers.values()]
+      .map(x => x.userId)
+  );
 
   io.emit(
     "update-user-list",
-    users.map((u) => ({
+    users.map(u => ({
       ...u,
       isOnline: online.has(u.id)
     }))
@@ -1321,9 +1258,19 @@ async function broadcastUsers() {
 }
 
 app.get("*", (req, res) =>
-  res.sendFile(path.join(__dirname, "public", "index.html"))
+  res.sendFile(
+    path.join(
+      __dirname,
+      "public",
+      "index.html"
+    )
+  )
 );
 
-server.listen(PORT, () =>
-  console.log(`Imaanaa Social running on ${PORT}`)
+server.listen(
+  PORT,
+  () =>
+    console.log(
+      `Imaanaa Social running on ${PORT}`
+    )
 );
