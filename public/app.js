@@ -89,20 +89,15 @@ async function auth(){
   }
 }
 
-async function boot(){
-  try{
-    const d=await api("/api/me");
-
-    me=d.user;
+async function boot() {
+  try {
+    const d = await api("/api/me");
+    me = d.user;
 
     $("auth").classList.add("hidden");
     $("app").classList.remove("hidden");
 
-    $("head").innerHTML=
-      `@${me.username} ${
-        me.is_admin?"🛡️":""
-      }<button class="btn red"
-      onclick="logout()">Logout</button>`;
+    $("head").innerHTML = `@${me.username} ${me.is_admin ? "🛡️ (Admin)" : ""} <button class="btn red" onclick="logout()">Logout</button>`;
 
     loadConfig();
     loadPosts();
@@ -110,15 +105,14 @@ async function boot(){
     loadRequests();
     loadNotifications();
 
-    socket.emit(
-      "register-user",
-      {token}
-    );
+    // Admin ta'naan pending posts load godhi
+    if (me.is_admin) {
+      loadPendingPosts();
+    }
 
-  }catch(e){
-    localStorage.removeItem(
-      "imaanaa_token"
-    );
+    socket.emit("register-user", { token });
+  } catch (e) {
+    localStorage.removeItem("imaanaa_token");
   }
 }
 
