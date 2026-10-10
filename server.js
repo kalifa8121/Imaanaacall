@@ -13,7 +13,6 @@ const io = new Server(server, { cors: { origin: "*" } });
 app.use(express.json());
 app.use(express.static('public'));
 
-// Neon PostgreSQL Database Connection
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false }
@@ -24,9 +23,9 @@ const ADMIN_CONTACT = {
   telegram: "@kalifaakka"
 };
 
-// --- REAL-TIME CHAT, 1-TO-1 & GROUP CALLS (SOCKET.IO) ---
+// Real-time Chat, 1-on-1 Call & Group Call WebRTC signaling
 let activeUsers = new Map(); // userId -> socketId
-let activeRooms = new Map(); // roomId -> Set of userIds
+let groupRooms = new Map();  // roomId -> Set of userIds
 
 io.on('connection', (socket) => {
   console.log('User Connected:', socket.id);
@@ -36,15 +35,11 @@ io.on('connection', (socket) => {
     io.emit('online_users', Array.from(activeUsers.keys()));
   });
 
-  // 1. 1-to-1 Video/Voice Call fi Offline Missed Call
+  // 1-on-1 Video/Voice Call Signaling
   socket.on('call_user', ({ toUserId, callerInfo, signalData, callType }) => {
     const receiverSocketId = activeUsers.get(toUserId);
     if (receiverSocketId) {
-      io.to(receiverSocketId).emit('incoming_call', {
-        from: callerInfo,
-        signal: signalData,
-        callType: callType || 'video'
-      });
+      io.to(receiverSocketId).emit('incoming_call', { from: callerInfo, signal: signalData, callType });
     } else {
       socket.emit('call_response', { status: 'offline_missed_call' });
     }
@@ -54,26 +49,20 @@ io.on('connection', (socket) => {
     io.to(data.to).emit('call_accepted', data.signal);
   });
 
-  // 3. Group Call / Room Management
+  // Group Call Rooms
   socket.on('join_group_call', ({ roomId, userId, userName }) => {
     socket.join(roomId);
-    if (!activeRooms.has(roomId)) activeRooms.set(roomId, new Set());
-    activeRooms.get(roomId).add(userId);
-
-    // Notify other members in the group room
-    socket.to(roomId).emit('user_joined_group', { userId, userName });
-  });
-
-  socket.on('group_signal', ({ roomId, signalData, fromUserId }) => {
-    socket.to(roomId).emit('group_signal', { signalData, fromUserId });
+    if (!groupRooms.has(roomId)) groupRooms.set(roomId, new Set());
+    groupRooms.get(roomId).add(userId);
+    io.to(roomId).emit('user_joined_group', { userId, userName, membersCount: groupRooms.get(roomId).size });
   });
 
   socket.on('leave_group_call', ({ roomId, userId }) => {
     socket.leave(roomId);
-    if (activeRooms.has(roomId)) {
-      activeRooms.get(roomId).delete(userId);
+    if (groupRooms.has(roomId)) {
+      groupRooms.get(roomId).delete(userId);
+      io.to(roomId).emit('user_left_group', { userId, membersCount: groupRooms.get(roomId).size });
     }
-    socket.to(roomId).emit('user_left_group', { userId });
   });
 
   socket.on('disconnect', () => {
@@ -89,7 +78,6 @@ io.on('connection', (socket) => {
 
 // --- API ENDPOINTS ---
 
-// 1. SignUp API
 app.post('/api/signup', async (req, res) => {
   const { name, email, password, phone, username } = req.body;
   try {
@@ -100,11 +88,10 @@ app.post('/api/signup', async (req, res) => {
     );
     res.json({ success: true, message: "Galmee milkaa'inaa!", user: result.rows[0] });
   } catch (err) {
-    res.status(500).json({ success: false, error: "Dogoggora galmee: " + err.message });
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
-// 2. Login API
 app.post('/api/login', async (req, res) => {
   const { username, password, email } = req.body;
   const loginKey = username || email;
@@ -113,7 +100,7 @@ app.post('/api/login', async (req, res) => {
     if (userRes.rows.length === 0) return res.status(400).json({ success: false, error: "User hin argamne" });
 
     const user = userRes.rows[0];
-    if (user.is_banned) return res.status(403).json({ success: false, error: `Akauntiin keessan adabameera.` });
+    if (user.is_banned) return res.status(403).json({ success: false, error: "Akauntiin keessan adabameera." });
 
     const validPassword = await bcrypt.compare(password, user.password);
     if (!validPassword) return res.status(400).json({ success: false, error: "Password dogoggoraa" });
@@ -121,42 +108,26 @@ app.post('/api/login', async (req, res) => {
     const is_admin = (user.role === 'admin' || user.username === 'admin');
     const token = jwt.sign({ id: user.id, role: user.role, is_admin }, process.env.JWT_SECRET || 'secret_key');
     
-    res.json({
-      success: true,
-      token,
-      user: {
-        id: user.id,
-        name: user.name,
-        username: user.username,
-        role: user.role,
-        is_admin,
-        is_vip: user.is_vip
-      }
-    });
+    res.json({ success: true, token, user: { id: user.id, name: user.name, username: user.username, role: user.role, is_admin, is_vip: user.is_vip } });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
 });
 
-// 2.2 Vidiyoo / Suuraa Upload Godhanii Post Gochuu (Admin Approval Workflow)
+// Video & Post Upload (Pending by default for admin approval)
 app.post('/api/posts', async (req, res) => {
   const { userId, content, mediaUrl, mediaType } = req.body;
   try {
-    // mediaType: 'video', 'image', 'audio'
     await pool.query(
       'INSERT INTO posts (user_id, content, media_url, media_type, status) VALUES ($1, $2, $3, $4, $5)',
-      [userId, content, mediaUrl, mediaType || 'image', 'pending']
+      [userId, content, mediaUrl, mediaType || 'none', 'pending']
     );
-    res.json({ 
-      success: true, 
-      message: "Postiin keessan (viidiyoo/suuraan) milkaa'inaan ergameera! Admin erga mirkaneessee booda uummataaf ni dhiyaata." 
-    });
+    res.json({ success: true, message: "Postiin keessan milkaa'inaan ergameera! Admin erga mirkaneessee booda ni mul'ata." });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
 });
 
-// 3. Fetch Approved Public Feed
 app.get('/api/posts', async (req, res) => {
   try {
     const posts = await pool.query("SELECT * FROM posts WHERE status = 'approved' ORDER BY created_at DESC");
@@ -166,34 +137,25 @@ app.get('/api/posts', async (req, res) => {
   }
 });
 
-// 4. Admin Dashboard: Pending Posts & Moderation
-app.get('/api/admin/pending-posts', async (req, res) => {
+// Friend Requests (Add, Confirm, Reject)
+app.post('/api/friend-request', async (req, res) => {
+  const { senderId, receiverId, action } = req.body; // action: 'send', 'confirm', 'reject'
   try {
-    const pending = await pool.query("SELECT * FROM posts WHERE status = 'pending' ORDER BY created_at DESC");
-    res.json(pending.rows);
+    if (action === 'send') {
+      await pool.query('INSERT INTO friends (sender_id, receiver_id, status) VALUES ($1, $2, $3)', [senderId, receiverId, 'pending']);
+    } else if (action === 'confirm') {
+      await pool.query('UPDATE friends SET status = \'accepted\' WHERE sender_id = $1 AND receiver_id = $2', [senderId, receiverId]);
+    } else if (action === 'reject') {
+      await pool.query('DELETE FROM friends WHERE sender_id = $1 AND receiver_id = $2', [senderId, receiverId]);
+    }
+    res.json({ success: true });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
 });
 
-app.post('/api/admin/moderate-post', async (req, res) => {
-  const { postId, action } = req.body; // 'approve' ykn 'reject'
-  try {
-    const newStatus = action === 'approve' ? 'approved' : 'rejected';
-    await pool.query('UPDATE posts SET status = $1 WHERE id = $2', [newStatus, postId]);
-    res.json({ success: true, message: `Postin milkaa'inaan ${newStatus} ta'eera!` });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-// 5. VIP Info Endpoint
 app.get('/api/vip-info', (req, res) => {
-  res.json({
-    message: "VIP Bitachuuf admin qunnamaa:",
-    phone: ADMIN_CONTACT.phone,
-    telegram: ADMIN_CONTACT.telegram
-  });
+  res.json({ phone: ADMIN_CONTACT.phone, telegram: ADMIN_CONTACT.telegram });
 });
 
 const PORT = process.env.PORT || 5000;
