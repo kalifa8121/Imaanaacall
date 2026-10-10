@@ -11,7 +11,7 @@ const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: "*" } });
 
 app.use(express.json());
-app.use(express.static('public')); // Frontend fayyadamuuf
+app.use(express.static('public'));
 
 // Neon PostgreSQL Database Connection
 const pool = new Pool({
@@ -19,14 +19,14 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false }
 });
 
-// Admin VIP Contact Info
 const ADMIN_CONTACT = {
   phone: "0920689815",
   telegram: "@kalifaakka"
 };
 
-// --- SOCKET.IO REAL-TIME CHAT & VIDEO CALL RINGING ---
+// --- REAL-TIME CHAT, 1-TO-1 & GROUP CALLS (SOCKET.IO) ---
 let activeUsers = new Map(); // userId -> socketId
+let activeRooms = new Map(); // roomId -> Set of userIds
 
 io.on('connection', (socket) => {
   console.log('User Connected:', socket.id);
@@ -36,22 +36,44 @@ io.on('connection', (socket) => {
     io.emit('online_users', Array.from(activeUsers.keys()));
   });
 
-  // Ringing Video Call & Offline Missed Call Notification
-  socket.on('call_user', ({ toUserId, callerInfo, signalData }) => {
+  // 1. 1-to-1 Video/Voice Call fi Offline Missed Call
+  socket.on('call_user', ({ toUserId, callerInfo, signalData, callType }) => {
     const receiverSocketId = activeUsers.get(toUserId);
     if (receiverSocketId) {
       io.to(receiverSocketId).emit('incoming_call', {
         from: callerInfo,
-        signal: signalData
+        signal: signalData,
+        callType: callType || 'video'
       });
     } else {
-      console.log(`User ${toUserId} is offline. Saving missed call.`);
       socket.emit('call_response', { status: 'offline_missed_call' });
     }
   });
 
   socket.on('answer_call', (data) => {
     io.to(data.to).emit('call_accepted', data.signal);
+  });
+
+  // 3. Group Call / Room Management
+  socket.on('join_group_call', ({ roomId, userId, userName }) => {
+    socket.join(roomId);
+    if (!activeRooms.has(roomId)) activeRooms.set(roomId, new Set());
+    activeRooms.get(roomId).add(userId);
+
+    // Notify other members in the group room
+    socket.to(roomId).emit('user_joined_group', { userId, userName });
+  });
+
+  socket.on('group_signal', ({ roomId, signalData, fromUserId }) => {
+    socket.to(roomId).emit('group_signal', { signalData, fromUserId });
+  });
+
+  socket.on('leave_group_call', ({ roomId, userId }) => {
+    socket.leave(roomId);
+    if (activeRooms.has(roomId)) {
+      activeRooms.get(roomId).delete(userId);
+    }
+    socket.to(roomId).emit('user_left_group', { userId });
   });
 
   socket.on('disconnect', () => {
@@ -67,7 +89,7 @@ io.on('connection', (socket) => {
 
 // --- API ENDPOINTS ---
 
-// 1. SignUp API (Customer / User)
+// 1. SignUp API
 app.post('/api/signup', async (req, res) => {
   const { name, email, password, phone, username } = req.body;
   try {
@@ -82,7 +104,7 @@ app.post('/api/signup', async (req, res) => {
   }
 });
 
-// 2. Login API (Admin fi Customer Addaan Baasuun)
+// 2. Login API
 app.post('/api/login', async (req, res) => {
   const { username, password, email } = req.body;
   const loginKey = username || email;
@@ -96,9 +118,7 @@ app.post('/api/login', async (req, res) => {
     const validPassword = await bcrypt.compare(password, user.password);
     if (!validPassword) return res.status(400).json({ success: false, error: "Password dogoggoraa" });
 
-    // Admin fi Customer Dashboard addaan baasuuf is_admin check godhuu
     const is_admin = (user.role === 'admin' || user.username === 'admin');
-
     const token = jwt.sign({ id: user.id, role: user.role, is_admin }, process.env.JWT_SECRET || 'secret_key');
     
     res.json({
@@ -118,21 +138,25 @@ app.post('/api/login', async (req, res) => {
   }
 });
 
-// 3. Post Submission (Maammilli post yeroo godhu "Pending" ta'a, Admin qofaaf mul'ata)
+// 2.2 Vidiyoo / Suuraa Upload Godhanii Post Gochuu (Admin Approval Workflow)
 app.post('/api/posts', async (req, res) => {
   const { userId, content, mediaUrl, mediaType } = req.body;
   try {
+    // mediaType: 'video', 'image', 'audio'
     await pool.query(
       'INSERT INTO posts (user_id, content, media_url, media_type, status) VALUES ($1, $2, $3, $4, $5)',
-      [userId, content, mediaUrl, mediaType || 'none', 'pending']
+      [userId, content, mediaUrl, mediaType || 'image', 'pending']
     );
-    res.json({ success: true, message: "Postiin keessan milkaa'inaan ergameera! Admin erga approve godhee booda public ni ta'a." });
+    res.json({ 
+      success: true, 
+      message: "Postiin keessan (viidiyoo/suuraan) milkaa'inaan ergameera! Admin erga mirkaneessee booda uummataaf ni dhiyaata." 
+    });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
 });
 
-// 4. Fetch Approved Public Feed (Feed gadi lakkifame qofa agarsiisa)
+// 3. Fetch Approved Public Feed
 app.get('/api/posts', async (req, res) => {
   try {
     const posts = await pool.query("SELECT * FROM posts WHERE status = 'approved' ORDER BY created_at DESC");
@@ -142,7 +166,7 @@ app.get('/api/posts', async (req, res) => {
   }
 });
 
-// 5. Admin Dashboard: Pending Posts Eegoo Ilaaluu fi Approve/Reject Gochuu
+// 4. Admin Dashboard: Pending Posts & Moderation
 app.get('/api/admin/pending-posts', async (req, res) => {
   try {
     const pending = await pool.query("SELECT * FROM posts WHERE status = 'pending' ORDER BY created_at DESC");
@@ -153,7 +177,7 @@ app.get('/api/admin/pending-posts', async (req, res) => {
 });
 
 app.post('/api/admin/moderate-post', async (req, res) => {
-  const { postId, action } = req.body; // action: 'approve' ykn 'reject'
+  const { postId, action } = req.body; // 'approve' ykn 'reject'
   try {
     const newStatus = action === 'approve' ? 'approved' : 'rejected';
     await pool.query('UPDATE posts SET status = $1 WHERE id = $2', [newStatus, postId]);
@@ -163,18 +187,7 @@ app.post('/api/admin/moderate-post', async (req, res) => {
   }
 });
 
-// 6. Admin Moderation: User Ban / Suspend Gochuu (Guyyoota Muraasaaf)
-app.post('/api/admin/moderate-user', async (req, res) => {
-  const { userIdToBan, banDays } = req.body;
-  try {
-    await pool.query('UPDATE users SET is_banned = true, ban_days = $1 WHERE id = $2', [banDays, userIdToBan]);
-    res.json({ success: true, message: `Maammilli guyyaa ${banDays}-f adabameera (suspended).` });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-// 7. VIP Contact Info Endpoint
+// 5. VIP Info Endpoint
 app.get('/api/vip-info', (req, res) => {
   res.json({
     message: "VIP Bitachuuf admin qunnamaa:",
