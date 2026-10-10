@@ -1,551 +1,203 @@
-<!doctype html>
-<html lang="om">
+<!DOCTYPE html>
+<html lang="om" class="h-full bg-slate-100">
 <head>
-<meta charset="utf-8">
-<meta name="viewport"
-content="width=device-width,initial-scale=1">
-
-<title>Imaanaa Social</title>
-
-<style>
-:root{
---blue:#1877f2;
---bg:#f0f2f5;
---card:#fff;
---muted:#65676b
-}
-
-*{
-box-sizing:border-box
-}
-
-body{
-margin:0;
-font-family:Arial,sans-serif;
-background:var(--bg);
-color:#111
-}
-
-.nav{
-position:sticky;
-top:0;
-z-index:10;
-background:#fff;
-border-bottom:1px solid #ddd;
-padding:10px 16px;
-display:flex;
-justify-content:space-between;
-align-items:center
-}
-
-.brand{
-font-size:24px;
-font-weight:800;
-color:var(--blue)
-}
-
-.wrap{
-max-width:900px;
-margin:18px auto;
-padding:0 10px
-}
-
-.card{
-background:#fff;
-border-radius:12px;
-padding:15px;
-margin:12px 0;
-box-shadow:0 1px 3px #0001
-}
-
-.input,
-textarea,
-select{
-width:100%;
-padding:11px;
-margin:5px 0;
-border:1px solid #ddd;
-border-radius:8px
-}
-
-.btn{
-border:0;
-border-radius:8px;
-padding:10px 14px;
-margin:3px;
-cursor:pointer;
-font-weight:700
-}
-
-.primary{
-background:var(--blue);
-color:#fff
-}
-
-.green{
-background:#42b72a;
-color:#fff
-}
-
-.red{
-background:#e53935;
-color:#fff
-}
-
-.gray{
-background:#e4e6eb
-}
-
-.row{
-display:flex;
-gap:8px;
-align-items:center;
-flex-wrap:wrap
-}
-
-.avatar{
-width:44px;
-height:44px;
-border-radius:50%;
-object-fit:cover;
-background:#ddd
-}
-
-<!-- Admin Dashboard Section -->
-<div id="adminPanel" class="card">
-  <h3>🛡️ Admin Moderation Panel</h3>
-  <h4>Post-oota Madaallii Eegan:</h4>
-  <div id="pendingPosts">
-    <p>Loading pending posts...</p>
-  </div>
-</div>
-  
-.status{
-display:inline-block;
-width:10px;
-height:10px;
-border-radius:50%;
-background:#bbb
-}
-
-.on{
-background:#31a24c
-}
-
-.post img,
-.post video{
-width:100%;
-max-height:520px;
-object-fit:contain;
-border-radius:10px;
-margin-top:8px
-}
-
-.tabs{
-display:flex;
-gap:5px;
-overflow:auto
-}
-
-.tabs button{
-white-space:nowrap
-}
-
-.hidden{
-display:none!important
-}
-
-.modal {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.75);
-  z-index: 9999; /* Elements hunda gubbaa akka ta'uuf */
-  display: none;
-  align-items: center;
-  justify-content: center;
-}
-
-/* Modal yeroo banamu display flex akka ta'u gochuuf */
-.modal.show {
-  display: flex !important;
-}
-
-.modal > div {
-  background: #fff;
-  border-radius: 14px;
-  padding: 20px;
-  max-width: 500px;
-  width: 90%;
-  text-align: center;
-  box-shadow: 0 5px 15px rgba(0,0,0,0.3);
-}
-.chatbox{
-height:360px;
-overflow:auto;
-border:1px solid #ddd;
-border-radius:10px;
-padding:10px
-}
-
-.bubble{
-padding:8px 11px;
-border-radius:12px;
-background:#eee;
-margin:5px;
-max-width:75%
-}
-
-.mine{
-margin-left:auto;
-background:#dbeafe
-}
-
-.small{
-color:var(--muted);
-font-size:13px
-}
-</style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SuperApp - Neon & Node Connected</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
 </head>
-
-<body>
-
-<div class="nav">
-<div class="brand">
-Imaanaa Social
-</div>
-
-<div id="head"></div>
-</div>
-
-<div class="wrap">
-
-<section id="auth" class="card">
-
-<h2 id="authTitle">
-Login
-</h2>
-
-<input
-id="username"
-class="input"
-placeholder="Username">
-
-<input
-id="password"
-class="input"
-type="password"
-placeholder="Password">
-
-<div id="signupFields"
-class="hidden">
-
-<input
-id="fullName"
-class="input"
-placeholder="Maqaa guutuu">
-
-<input
-id="phone"
-class="input"
-placeholder="Phone">
-
-<input
-id="city"
-class="input"
-placeholder="Magaalaa">
-
-<select
-id="gender"
-class="input">
-
-<option value="">
-Saala
-</option>
-
-<option>
-Male
-</option>
-
-<option>
-Female
-</option>
-
-</select>
-
-<textarea
-id="bio"
-placeholder="Bio">
-</textarea>
-
-</div>
-
-<button
-class="btn primary"
-id="authBtn"
-onclick="auth()">
-Login
-</button>
-
-<button
-class="btn gray"
-onclick="toggleAuth()">
-Signup/Login
-</button>
-
-</section>
-
-<section id="app" class="hidden">
-
-<div class="tabs">
-
-<button
-class="btn primary"
-onclick="show('home')">
-Home
-</button>
-
-<button
-class="btn gray"
-onclick="show('people')">
-People
-</button>
-
-<button
-class="btn gray"
-onclick="show('chat')">
-Chat
-</button>
-
-<button
-class="btn gray"
-onclick="show('profile')">
-Profile
-</button>
-
-<button
-class="btn gray"
-onclick="show('saved')">
-Saved
-</button>
-
-</div>
-
-<div id="vip" class="card"></div>
-
-<div id="home">
-
-<div class="card">
-
-<h3>
-Post Haaraa
-</h3>
-
-<textarea
-id="postText"
-placeholder="Maaltu jira?">
-</textarea>
-
-<input
-id="media"
-type="file"
-accept="image/*,video/*,audio/*"
-class="input">
-
-<button
-class="btn primary"
-onclick="createPost()">
-Post Godhi
-</button>
-
-<p class="small">
-Postiin erga ergamee booda
-ilaalcha qulqullinaa keessa darba;
-yeroo public ta'u notification argatta.
-</p>
-
-</div>
-
-<div id="feed"></div>
-
-</div>
-
-<div id="people" class="hidden">
-
-<div class="card">
-
-<h3>
-Maammiltoota
-</h3>
-
-<div id="users"></div>
-
-</div>
-
-<div class="card">
-
-<h3>
-Friend Requests
-</h3>
-
-<div id="requests"></div>
-
-</div>
-
-</div>
-
-<div id="chat" class="hidden">
-
-<div class="card">
-
-<h3>
-Chat
-</h3>
-
-<select
-id="chatUser"
-class="input"
-onchange="loadChat()">
-</select>
-
-<div
-id="chatbox"
-class="chatbox">
-</div>
-
-<div class="row">
-
-<input
-id="chatText"
-class="input"
-style="flex:1"
-placeholder="Ergaa...">
-
-<button
-class="btn primary"
-onclick="sendChat()">
-Send
-</button>
-
-</div>
-
-</div>
-
-</div>
-
-<div id="profile" class="hidden">
-
-<div class="card">
-
-<h3>
-Profile Edit
-</h3>
-
-<input
-id="pname"
-class="input"
-placeholder="Maqaa guutuu">
-
-<input
-id="pphone"
-class="input"
-placeholder="Phone">
-
-<input
-id="pcity"
-class="input"
-placeholder="City">
-
-<textarea
-id="pbio"
-class="input"
-placeholder="Bio">
-</textarea>
-
-<input
-id="avatar"
-type="file"
-accept="image/*"
-class="input">
-
-<input
-id="cover"
-type="file"
-accept="image/*"
-class="input">
-
-<button
-class="btn green"
-onclick="saveProfile()">
-Save Profile
-</button>
-
-</div>
-
-</div>
-
-<div id="saved" class="hidden">
-
-<div class="card">
-
-<h3>
-Saved Posts
-</h3>
-
-<div id="savedFeed"></div>
-
-</div>
-
-</div>
-
-</section>
-
-</div>
-  
-<!-- Incoming Call Modal -->
-<div id="callModal" class="modal">
-  <div>
-    <h2 id="caller">Waamicha...</h2>
-    <div class="row" style="justify-content: center; margin-top: 15px;">
-      <button class="btn green" id="acceptCallBtn" onclick="acceptCall()">Accept</button>
-      <button class="btn red" id="rejectCallBtn" onclick="rejectCall()">Reject</button>
+<body class="h-full text-slate-800 antialiased flex flex-col">
+
+  <!-- AUTH GATEWAY -->
+  <div id="authGateway" class="fixed inset-0 bg-slate-900 z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl max-w-md w-full p-8 shadow-2xl">
+      <h2 id="authTitle" class="text-xl font-bold text-center mb-4">SuperApp Portal</h2>
+      
+      <div class="flex bg-slate-100 p-1 rounded-xl mb-4 text-xs font-bold">
+        <button onclick="setPortal('customer')" id="btnCust" class="flex-1 py-2 rounded-lg bg-white text-blue-600 shadow">Customer</button>
+        <button onclick="setPortal('admin')" id="btnAdmin" class="flex-1 py-2 rounded-lg text-slate-500">Admin</button>
+      </div>
+
+      <form onsubmit="handleAuth(event)" class="space-y-3">
+        <div id="signupNameField" class="hidden">
+          <label class="text-xs font-bold">Maqaa Guutuu</label>
+          <input type="text" id="regName" class="w-full border p-2.5 rounded-xl text-sm">
+        </div>
+        <div>
+          <label class="text-xs font-bold">Username</label>
+          <input type="text" id="authUsername" required class="w-full border p-2.5 rounded-xl text-sm">
+        </div>
+        <div>
+          <label class="text-xs font-bold">Password</label>
+          <input type="password" id="authPassword" required class="w-full border p-2.5 rounded-xl text-sm">
+        </div>
+        <button type="submit" id="submitAuthBtn" class="w-full bg-blue-600 text-white font-bold py-3 rounded-xl">Login</button>
+      </form>
+      <button onclick="toggleSignupMode()" id="toggleSignupBtn" class="w-full text-xs text-blue-600 mt-3 font-semibold">Akaakilii hin qabdu? Signup godhi</button>
     </div>
   </div>
-</div>
 
-<!-- Active Call Screen Modal -->
-<div id="callScreen" class="modal">
-  <div>
-    <h3>Voice/Video Call</h3>
-    <div class="row" style="margin-bottom: 15px;">
-      <video id="local" autoplay muted playsinline style="width:48%; background: #000; border-radius: 8px;"></video>
-      <video id="remote" autoplay playsinline style="width:48%; background: #000; border-radius: 8px;"></video>
+  <!-- MAIN APP CONTAINER -->
+  <div id="mainApp" class="flex flex-col h-screen overflow-hidden hidden">
+    <header class="bg-blue-600 text-white p-3 flex justify-between items-center shadow">
+      <h1 id="headerTitle" class="font-black text-xl">SuperApp</h1>
+      <button onclick="logout()" class="bg-rose-600 text-xs px-3 py-1.5 rounded-lg font-bold">Bahu (Logout)</button>
+    </header>
+
+    <div class="flex-1 flex overflow-hidden">
+      <!-- CUSTOMER FEED & POST -->
+      <main id="customerView" class="flex-1 p-5 overflow-y-auto space-y-4 max-w-2xl mx-auto hidden">
+        <div class="bg-white p-4 rounded-2xl border shadow-sm space-y-3">
+          <textarea id="postText" rows="2" placeholder="Maal yaadaa jirta?..." class="w-full bg-slate-50 border p-3 rounded-xl text-sm"></textarea>
+          <input type="text" id="postMedia" placeholder="Media/Video URL (optional)" class="w-full border p-2 rounded-xl text-xs">
+          <button onclick="createPost()" class="bg-blue-600 text-white font-bold text-xs px-5 py-2.5 rounded-xl">Post Ergi</button>
+        </div>
+        <div id="publicFeed" class="space-y-4"></div>
+      </main>
+
+      <!-- ADMIN PANEL -->
+      <main id="adminView" class="flex-1 p-5 overflow-y-auto space-y-4 max-w-4xl mx-auto hidden">
+        <h2 class="text-xl font-bold">Admin Pending Posts Control</h2>
+        <div id="adminPendingList" class="space-y-3"></div>
+      </main>
     </div>
-    <button class="btn red" id="endCallBtn" onclick="endCall()">End Call</button>
   </div>
-</div>
 
-<button
-class="btn red"
-onclick="endCall()">
-End
-</button>
+  <script>
+    const API_URL = "http://localhost:5000/api"; // Render irratti yeroo afran URL server keessan jijjiiraa
+    let currentPortal = 'customer';
+    let isSignupMode = false;
+    let currentUser = null;
 
-</div>
+    function setPortal(portal) {
+      currentPortal = portal;
+      isSignupMode = false;
+      document.getElementById('btnCust').className = portal === 'customer' ? 'flex-1 py-2 rounded-lg bg-white text-blue-600 shadow' : 'flex-1 py-2 rounded-lg text-slate-500';
+      document.getElementById('btnAdmin').className = portal === 'admin' ? 'flex-1 py-2 rounded-lg bg-white text-amber-600 shadow' : 'flex-1 py-2 rounded-lg text-slate-500';
+      document.getElementById('signupNameField').classList.add('hidden');
+      document.getElementById('toggleSignupBtn').classList.toggle('hidden', portal === 'admin');
+    }
 
-</div>
+    function toggleSignupMode() {
+      isSignupMode = !isSignupMode;
+      document.getElementById('signupNameField').classList.toggle('hidden', !isSignupMode);
+      document.getElementById('submitAuthBtn').innerText = isSignupMode ? "Signup" : "Login";
+      document.getElementById('toggleSignupBtn').innerText = isSignupMode ? "Akkaawuntii qabda? Login godhi" : "Akkaawuntii hin qabdu? Signup godhi";
+    }
 
-<audio
-id="ringtone"
-loop
-src="https://actions.google.com/sounds/v1/ambiences/office_phone_ring.ogg">
-</audio>
+    async function handleAuth(e) {
+      e.preventDefault();
+      const username = document.getElementById('authUsername').value;
+      const password = document.getElementById('authPassword').value;
+      const full_name = document.getElementById('regName').value;
 
-<script src="/socket.io/socket.io.js"></script>
+      const endpoint = isSignupMode ? `${API_URL}/signup` : `${API_URL}/login`;
+      const body = isSignupMode ? { username, password, full_name, role: currentPortal } : { username, password };
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/simple-peer/9.11.1/simplepeer.min.js">
-</script>
+      try {
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+        const data = await res.json();
+        if (data.success) {
+          currentUser = data.user;
+          launchApp();
+        } else {
+          alert("Dogoggora: " + data.error);
+        }
+      } catch (err) {
+        alert("Server wajjin walqunnamuun hin danda'amne: " + err.message);
+      }
+    }
 
-<script src="app.js"></script>
+    function launchApp() {
+      document.getElementById('authGateway').classList.add('hidden');
+      document.getElementById('mainApp').classList.remove('hidden');
 
+      const isAdmin = currentUser.role === 'admin';
+      document.getElementById('customerView').classList.toggle('hidden', isAdmin);
+      document.getElementById('adminView').classList.toggle('hidden', !isAdmin);
+
+      if (isAdmin) {
+        document.getElementById('headerTitle').innerText = "SuperApp Admin Dashboard";
+        fetchAdminPending();
+      } else {
+        document.getElementById('headerTitle').innerText = "SuperApp Customer Feed";
+        fetchPublicFeed();
+      }
+    }
+
+    async function createPost() {
+      const content = document.getElementById('postText').value;
+      const media_url = document.getElementById('postMedia').value;
+      const res = await fetch(`${API_URL}/posts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: currentUser.id, content, media_url })
+      });
+      const data = await res.json();
+      alert(data.message);
+      document.getElementById('postText').value = '';
+      document.getElementById('postMedia').value = '';
+    }
+
+    async function fetchPublicFeed() {
+      const res = await fetch(`${API_URL}/posts/approved`);
+      const posts = await res.json();
+      const feed = document.getElementById('publicFeed');
+      feed.innerHTML = posts.map(p => `
+        <div class="bg-white p-4 rounded-2xl border shadow-sm space-y-2">
+          <h4 class="font-bold text-xs">${p.full_name}</h4>
+          <p class="text-xs text-slate-700">${p.content}</p>
+          ${p.media_url ? `<video controls src="${p.media_url}" class="w-full max-h-60 rounded-xl object-cover"></video>` : ''}
+        </div>
+      `).join('');
+    }
+
+    async function fetchAdminPending() {
+      const res = await fetch(`${API_URL}/admin/pending`);
+      const posts = await res.json();
+      const list = document.getElementById('adminPendingList');
+      list.innerHTML = posts.map(p => `
+        <div class="bg-white p-4 rounded-2xl border flex justify-between items-center">
+          <div>
+            <span class="font-bold text-xs">${p.full_name}</span>
+            <p class="text-xs text-slate-600">${p.content}</p>
+          </div>
+          <div class="flex gap-2">
+            <button onclick="approvePost(${p.id})" class="bg-emerald-600 text-white text-xs px-3 py-1.5 rounded-lg font-bold">Approve</button>
+            <button onclick="rejectPost(${p.id})" class="bg-rose-600 text-white text-xs px-3 py-1.5 rounded-lg font-bold">Reject</button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    async function approvePost(id) {
+      await fetch(`${API_URL}/admin/approve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ post_id: id })
+      });
+      fetchAdminPending();
+    }
+
+    async function rejectPost(id) {
+      await fetch(`${API_URL}/admin/reject`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ post_id: id })
+      });
+      fetchAdminPending();
+    }
+
+    function logout() {
+      currentUser = null;
+      document.getElementById('mainApp').classList.add('hidden');
+      document.getElementById('authGateway').classList.remove('hidden');
+    }
+  </script>
 </body>
 </html>
