@@ -22,7 +22,7 @@
   <!-- WORKSPACE CONTAINER -->
   <div class="flex-1 flex overflow-hidden relative">
 
-    <!-- CUSTOMER DASHBOARD (Default Feed, Chat, Reels) -->
+    <!-- 1. CUSTOMER DASHBOARD -->
     <main id="customerDashboard" class="flex-1 bg-slate-100 overflow-y-auto p-4 hidden">
       <div class="max-w-2xl mx-auto space-y-4">
         <!-- Post Create Box -->
@@ -38,7 +38,7 @@
       </div>
     </main>
 
-    <!-- ADMIN DASHBOARD (Post Approval & User Suspension Only) -->
+    <!-- 2. ADMIN DASHBOARD -->
     <main id="adminDashboard" class="flex-1 bg-slate-900 text-white overflow-y-auto p-6 hidden">
       <div class="max-w-4xl mx-auto space-y-6">
         <div class="bg-slate-800 p-5 rounded-2xl border border-slate-700 flex justify-between items-center">
@@ -59,7 +59,7 @@
 
   </div>
 
-  <!-- AUTHENTICATION MODAL (LOGIN / SIGNUP ADDAA BAAYE) -->
+  <!-- AUTHENTICATION MODAL (LOGIN & SIGNUP) -->
   <div id="authModal" class="fixed inset-0 bg-slate-900/90 backdrop-blur-sm z-50 flex items-center justify-center p-4">
     <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl">
       <div class="text-center mb-6">
@@ -67,7 +67,6 @@
         <p class="text-xs text-slate-500">Maaloo Maammila ykn Admin ta'uun seenaa.</p>
       </div>
 
-      <!-- Tabs for Login / Signup -->
       <div class="flex bg-slate-100 p-1 rounded-xl mb-4 text-xs font-bold">
         <button id="tabBtnLogin" onclick="switchAuthTab('login')" class="flex-1 py-2 rounded-lg bg-white shadow text-blue-600">Login</button>
         <button id="tabBtnSignup" onclick="switchAuthTab('signup')" class="flex-1 py-2 rounded-lg text-slate-500">Signup</button>
