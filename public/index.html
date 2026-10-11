@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Imaanaa Social - Customer & Admin Dashboard</title>
+  <title>Imaanaa Social - Customer & Admin Portals</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/lucide@latest"></script>
 </head>
@@ -19,7 +19,7 @@
     </div>
   </header>
 
-  <!-- WORKSPACE CONTAINER -->
+  <!-- MAIN WORKSPACE -->
   <div class="flex-1 flex overflow-hidden relative">
 
     <!-- 1. CUSTOMER DASHBOARD -->
@@ -60,10 +60,10 @@
   </div>
 
   <!-- AUTHENTICATION MODAL (LOGIN & SIGNUP ADDDAA BAAYE) -->
-  <div id="authModal" class="fixed inset-0 bg-slate-900/90 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+  <div id="authModal" class="fixed inset-0 bg-slate-900/95 backdrop-blur-md z-50 flex items-center justify-center p-4">
     <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl">
       <div class="text-center mb-6">
-        <h2 class="text-xl font-bold text-slate-800">Imaanaa Social Login</h2>
+        <h2 class="text-xl font-bold text-slate-800">Imaanaa Social Portal</h2>
         <p class="text-xs text-slate-500">Maaloo Maammila ykn Admin ta'uun seenaa.</p>
       </div>
 
@@ -75,8 +75,9 @@
       <form id="authForm" onsubmit="handleAuthSubmit(event)" class="space-y-3">
         <div id="signupFields" class="hidden space-y-3">
           <input type="text" id="regName" placeholder="Maqaa Guutuu" class="w-full text-sm border p-2.5 rounded-xl">
+          <input type="text" id="regPhone" placeholder="Bilbila (09...)" class="w-full text-sm border p-2.5 rounded-xl">
         </div>
-        <input type="text" id="authUsername" placeholder="Username" required class="w-full text-sm border p-2.5 rounded-xl">
+        <input type="text" id="authUsername" placeholder="Username (fkn: kalifa ykn admin)" required class="w-full text-sm border p-2.5 rounded-xl">
         <input type="password" id="authPassword" placeholder="Password" required class="w-full text-sm border p-2.5 rounded-xl">
         <button type="submit" id="authSubmitBtn" class="w-full bg-blue-600 text-white font-bold py-3 rounded-xl shadow">Seeni (Login)</button>
       </form>
@@ -97,12 +98,12 @@
 
     async function handleAuthSubmit(e) {
       e.preventDefault();
-      const username = document.getElementById('authUsername').value;
-      const password = document.getElementById('authPassword').value;
+      const username = document.getElementById('authUsername').value.trim();
+      const password = document.getElementById('authPassword').value.trim();
       const endpoint = authMode === 'signup' ? '/api/signup' : '/api/login';
       
       const payload = authMode === 'signup' 
-        ? { name: document.getElementById('regName').value, username, email: username + '@mail.com', password }
+        ? { name: document.getElementById('regName').value, username, phone: document.getElementById('regPhone').value, password }
         : { username, password };
 
       const res = await fetch(endpoint, {
