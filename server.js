@@ -24,7 +24,6 @@ const ADMIN_CONTACT = {
 };
 
 let activeUsers = new Map();
-let groupRooms = new Map();
 
 io.on('connection', (socket) => {
   socket.on('register_user', (userId) => {
@@ -45,13 +44,6 @@ io.on('connection', (socket) => {
     io.to(data.to).emit('call_accepted', data.signal);
   });
 
-  socket.on('join_group_call', ({ roomId, userId, userName }) => {
-    socket.join(roomId);
-    if (!groupRooms.has(roomId)) groupRooms.set(roomId, new Set());
-    groupRooms.get(roomId).add(userId);
-    io.to(roomId).emit('user_joined_group', { userId, userName, membersCount: groupRooms.get(roomId).size });
-  });
-
   socket.on('disconnect', () => {
     for (let [userId, socketId] of activeUsers.entries()) {
       if (socketId === socket.id) {
@@ -63,13 +55,16 @@ io.on('connection', (socket) => {
   });
 });
 
+// --- API ENDPOINTS ---
+
+// Signup API (Email fi Password qofa fayyadamuun)
 app.post('/api/signup', async (req, res) => {
-  const { name, email, password, phone, username } = req.body;
+  const { name, email, password, phone } = req.body;
   try {
     const hashedPassword = await bcrypt.hash(password, 10);
     const result = await pool.query(
-      'INSERT INTO users (name, username, email, password, phone, role) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, name, username, role',
-      [name, username || email.split('@')[0], email, hashedPassword, phone, 'user']
+      'INSERT INTO users (name, email, password, phone, role) VALUES ($1, $2, $3, $4, $5) RETURNING id, name, email, role',
+      [name, email, hashedPassword, phone, 'user']
     );
     res.json({ success: true, message: "Galmee milkaa'inaa!", user: result.rows[0] });
   } catch (err) {
@@ -77,11 +72,11 @@ app.post('/api/signup', async (req, res) => {
   }
 });
 
+// Login API (Email fi Password)
 app.post('/api/login', async (req, res) => {
-  const { username, password, email } = req.body;
-  const loginKey = username || email;
+  const { email, password } = req.body;
   try {
-    const userRes = await pool.query('SELECT * FROM users WHERE username = $1 OR email = $1', [loginKey]);
+    const userRes = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
     if (userRes.rows.length === 0) return res.status(400).json({ success: false, error: "User hin argamne" });
 
     const user = userRes.rows[0];
@@ -90,7 +85,7 @@ app.post('/api/login', async (req, res) => {
     const validPassword = await bcrypt.compare(password, user.password);
     if (!validPassword) return res.status(400).json({ success: false, error: "Password dogoggoraa" });
 
-    const is_admin = (user.role === 'admin' || user.username === 'admin');
+    const is_admin = (user.role === 'admin' || user.email === 'admin@app.com');
     const token = jwt.sign({ id: user.id, role: user.role, is_admin }, process.env.JWT_SECRET || 'secret_key');
     
     res.json({
@@ -99,7 +94,7 @@ app.post('/api/login', async (req, res) => {
       user: {
         id: user.id,
         name: user.name,
-        username: user.username,
+        email: user.email,
         role: user.role,
         is_admin,
         is_vip: user.is_vip
@@ -117,7 +112,7 @@ app.post('/api/posts', async (req, res) => {
       'INSERT INTO posts (user_id, content, media_url, media_type, status) VALUES ($1, $2, $3, $4, $5)',
       [userId, content, mediaUrl, mediaType || 'none', 'pending']
     );
-    res.json({ success: true, message: "Postiin keessan milkaa'inaan ergameera! Admin erga mirkaneessee booda ni mul'ata." });
+    res.json({ success: true, message: "Postiin keessan ergameera! Admin erga mirkaneessee booda baha." });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -146,7 +141,7 @@ app.post('/api/admin/moderate-post', async (req, res) => {
   try {
     const newStatus = action === 'approve' ? 'approved' : 'rejected';
     await pool.query('UPDATE posts SET status = $1 WHERE id = $2', [newStatus, postId]);
-    res.json({ success: true, message: `Postin ${newStatus} ta'eera!` });
+    res.json({ success: true });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
