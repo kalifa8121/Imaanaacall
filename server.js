@@ -4,7 +4,6 @@ const { Server } = require('socket.io');
 const { Pool } = require('pg');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const path = require('path');
 require('dotenv').config();
 
 const app = express();
@@ -12,7 +11,7 @@ const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: "*" } });
 
 app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static('public'));
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -24,20 +23,45 @@ const ADMIN_CONTACT = {
   telegram: "@kalifaakka"
 };
 
-let activeUsers = new Map();
+// Real-time Chat, 1-on-1 Call, Group Call & Online Status
+let activeUsers = new Map(); // userId -> socketId
+let groupRooms = new Map();  // roomId -> Set of userIds
 
 io.on('connection', (socket) => {
+  console.log('User Connected:', socket.id);
+
   socket.on('register_user', (userId) => {
     activeUsers.set(userId, socket.id);
     io.emit('online_users', Array.from(activeUsers.keys()));
   });
 
+  // 1-on-1 Video/Voice Call Signaling
   socket.on('call_user', ({ toUserId, callerInfo, signalData, callType }) => {
     const receiverSocketId = activeUsers.get(toUserId);
     if (receiverSocketId) {
       io.to(receiverSocketId).emit('incoming_call', { from: callerInfo, signal: signalData, callType });
     } else {
       socket.emit('call_response', { status: 'offline_missed_call' });
+    }
+  });
+
+  socket.on('answer_call', (data) => {
+    io.to(data.to).emit('call_accepted', data.signal);
+  });
+
+  // Group Call Rooms
+  socket.on('join_group_call', ({ roomId, userId, userName }) => {
+    socket.join(roomId);
+    if (!groupRooms.has(roomId)) groupRooms.set(roomId, new Set());
+    groupRooms.get(roomId).add(userId);
+    io.to(roomId).emit('user_joined_group', { userId, userName, membersCount: groupRooms.get(roomId).size });
+  });
+
+  socket.on('leave_group_call', ({ roomId, userId }) => {
+    socket.leave(roomId);
+    if (groupRooms.has(roomId)) {
+      groupRooms.get(roomId).delete(userId);
+      io.to(roomId).emit('user_left_group', { userId, membersCount: groupRooms.get(roomId).size });
     }
   });
 
@@ -54,15 +78,14 @@ io.on('connection', (socket) => {
 
 // --- API ENDPOINTS ---
 
-// Signup API (Customer & Admin registration check)
+// 1. Signup API
 app.post('/api/signup', async (req, res) => {
-  const { name, username, email, password, phone } = req.body;
+  const { name, email, password, phone, username } = req.body;
   try {
     const hashedPassword = await bcrypt.hash(password, 10);
-    const role = (username === 'admin') ? 'admin' : 'user';
     const result = await pool.query(
       'INSERT INTO users (name, username, email, password, phone, role) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, name, username, role',
-      [name, username, email || `${username}@mail.com`, hashedPassword, phone, role]
+      [name, username || email.split('@')[0], email, hashedPassword, phone, 'user']
     );
     res.json({ success: true, message: "Galmee milkaa'inaa!", user: result.rows[0] });
   } catch (err) {
@@ -70,11 +93,12 @@ app.post('/api/signup', async (req, res) => {
   }
 });
 
-// Login API (Strict Admin & Customer Dashboard Routing)
+// 2. Login API (Admin & Customer Dashboard Routing check)
 app.post('/api/login', async (req, res) => {
-  const { username, password } = req.body;
+  const { username, password, email } = req.body;
+  const loginKey = username || email;
   try {
-    const userRes = await pool.query('SELECT * FROM users WHERE username = $1 OR email = $1', [username]);
+    const userRes = await pool.query('SELECT * FROM users WHERE username = $1 OR email = $1', [loginKey]);
     if (userRes.rows.length === 0) return res.status(400).json({ success: false, error: "User hin argamne" });
 
     const user = userRes.rows[0];
@@ -103,7 +127,7 @@ app.post('/api/login', async (req, res) => {
   }
 });
 
-// Posts API (User posts default to pending)
+// 3. Post & Video Upload (Default: Pending for Admin Approval)
 app.post('/api/posts', async (req, res) => {
   const { userId, content, mediaUrl, mediaType } = req.body;
   try {
@@ -111,7 +135,7 @@ app.post('/api/posts', async (req, res) => {
       'INSERT INTO posts (user_id, content, media_url, media_type, status) VALUES ($1, $2, $3, $4, $5)',
       [userId, content, mediaUrl, mediaType || 'none', 'pending']
     );
-    res.json({ success: true, message: "Postiin keessan ergameera! Admin erga mirkaneessee booda baha." });
+    res.json({ success: true, message: "Postiin keessan milkaa'inaan ergameera! Admin erga mirkaneessee booda public ni ta'a." });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -126,7 +150,7 @@ app.get('/api/posts', async (req, res) => {
   }
 });
 
-// Admin Pending Posts & Moderation
+// 4. Admin Moderation (Pending Posts & User Banning)
 app.get('/api/admin/pending-posts', async (req, res) => {
   try {
     const pending = await pool.query("SELECT * FROM posts WHERE status = 'pending' ORDER BY created_at DESC");
@@ -137,10 +161,37 @@ app.get('/api/admin/pending-posts', async (req, res) => {
 });
 
 app.post('/api/admin/moderate-post', async (req, res) => {
-  const { postId, action } = req.body;
+  const { postId, action } = req.body; // 'approve' ykn 'reject'
   try {
     const newStatus = action === 'approve' ? 'approved' : 'rejected';
     await pool.query('UPDATE posts SET status = $1 WHERE id = $2', [newStatus, postId]);
+    res.json({ success: true, message: `Postin ${newStatus} ta'eera!` });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/admin/moderate-user', async (req, res) => {
+  const { userIdToBan, banDays } = req.body;
+  try {
+    await pool.query('UPDATE users SET is_banned = true, ban_days = $1 WHERE id = $2', [banDays, userIdToBan]);
+    res.json({ success: true, message: `Maammilli guyyaa ${banDays}-f adabameera.` });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 5. Friend Requests (Add, Confirm, Reject)
+app.post('/api/friend-request', async (req, res) => {
+  const { senderId, receiverId, action } = req.body; // 'send', 'confirm', 'reject'
+  try {
+    if (action === 'send') {
+      await pool.query('INSERT INTO friends (sender_id, receiver_id, status) VALUES ($1, $2, $3)', [senderId, receiverId, 'pending']);
+    } else if (action === 'confirm') {
+      await pool.query('UPDATE friends SET status = \'accepted\' WHERE sender_id = $1 AND receiver_id = $2', [senderId, receiverId]);
+    } else if (action === 'reject') {
+      await pool.query('DELETE FROM friends WHERE sender_id = $1 AND receiver_id = $2', [senderId, receiverId]);
+    }
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
