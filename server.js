@@ -4,7 +4,7 @@ const { Server } = require('socket.io');
 const { Pool } = require('pg');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-path = require('path');
+const path = require('path');
 require('dotenv').config();
 
 const app = express();
@@ -24,7 +24,6 @@ const ADMIN_CONTACT = {
   telegram: "@kalifaakka"
 };
 
-// Real-Time Socket.io fi Call Signaling
 let activeUsers = new Map();
 
 io.on('connection', (socket) => {
@@ -55,14 +54,15 @@ io.on('connection', (socket) => {
 
 // --- API ENDPOINTS ---
 
-// Signup API
+// Signup API (Customer & Admin registration check)
 app.post('/api/signup', async (req, res) => {
   const { name, username, email, password, phone } = req.body;
   try {
     const hashedPassword = await bcrypt.hash(password, 10);
+    const role = (username === 'admin') ? 'admin' : 'user';
     const result = await pool.query(
       'INSERT INTO users (name, username, email, password, phone, role) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, name, username, role',
-      [name, username, email || `${username}@mail.com`, hashedPassword, phone, 'user']
+      [name, username, email || `${username}@mail.com`, hashedPassword, phone, role]
     );
     res.json({ success: true, message: "Galmee milkaa'inaa!", user: result.rows[0] });
   } catch (err) {
@@ -70,7 +70,7 @@ app.post('/api/signup', async (req, res) => {
   }
 });
 
-// Login API (Admin & Customer Routing)
+// Login API (Strict Admin & Customer Dashboard Routing)
 app.post('/api/login', async (req, res) => {
   const { username, password } = req.body;
   try {
@@ -103,7 +103,7 @@ app.post('/api/login', async (req, res) => {
   }
 });
 
-// Posts API
+// Posts API (User posts default to pending)
 app.post('/api/posts', async (req, res) => {
   const { userId, content, mediaUrl, mediaType } = req.body;
   try {
@@ -126,7 +126,7 @@ app.get('/api/posts', async (req, res) => {
   }
 });
 
-// Admin Pending Posts
+// Admin Pending Posts & Moderation
 app.get('/api/admin/pending-posts', async (req, res) => {
   try {
     const pending = await pool.query("SELECT * FROM posts WHERE status = 'pending' ORDER BY created_at DESC");
