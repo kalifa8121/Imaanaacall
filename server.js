@@ -4,6 +4,7 @@ const { Server } = require('socket.io');
 const { Pool } = require('pg');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+path = require('path');
 require('dotenv').config();
 
 const app = express();
@@ -11,7 +12,7 @@ const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: "*" } });
 
 app.use(express.json());
-app.use(express.static('public'));
+app.use(express.static(path.join(__dirname, 'public')));
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -23,8 +24,8 @@ const ADMIN_CONTACT = {
   telegram: "@kalifaakka"
 };
 
+// Real-Time Socket.io fi Call Signaling
 let activeUsers = new Map();
-let groupRooms = new Map();
 
 io.on('connection', (socket) => {
   socket.on('register_user', (userId) => {
@@ -41,17 +42,6 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('answer_call', (data) => {
-    io.to(data.to).emit('call_accepted', data.signal);
-  });
-
-  socket.on('join_group_call', ({ roomId, userId, userName }) => {
-    socket.join(roomId);
-    if (!groupRooms.has(roomId)) groupRooms.set(roomId, new Set());
-    groupRooms.get(roomId).add(userId);
-    io.to(roomId).emit('user_joined_group', { userId, userName, membersCount: groupRooms.get(roomId).size });
-  });
-
   socket.on('disconnect', () => {
     for (let [userId, socketId] of activeUsers.entries()) {
       if (socketId === socket.id) {
@@ -65,7 +55,7 @@ io.on('connection', (socket) => {
 
 // --- API ENDPOINTS ---
 
-// Signup API (Username, Name, Email, Password)
+// Signup API
 app.post('/api/signup', async (req, res) => {
   const { name, username, email, password, phone } = req.body;
   try {
@@ -80,7 +70,7 @@ app.post('/api/signup', async (req, res) => {
   }
 });
 
-// Login API (Admin & Customer Dashboard Routing)
+// Login API (Admin & Customer Routing)
 app.post('/api/login', async (req, res) => {
   const { username, password } = req.body;
   try {
@@ -113,7 +103,7 @@ app.post('/api/login', async (req, res) => {
   }
 });
 
-// Posts Endpoint (Pending by default)
+// Posts API
 app.post('/api/posts', async (req, res) => {
   const { userId, content, mediaUrl, mediaType } = req.body;
   try {
@@ -151,7 +141,7 @@ app.post('/api/admin/moderate-post', async (req, res) => {
   try {
     const newStatus = action === 'approve' ? 'approved' : 'rejected';
     await pool.query('UPDATE posts SET status = $1 WHERE id = $2', [newStatus, postId]);
-    res.json({ success: true, message: `Postin ${newStatus} ta'eera!` });
+    res.json({ success: true });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
