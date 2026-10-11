@@ -3,80 +3,195 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Imaanaa Social - Customer Dashboard</title>
+  <title>Imaanaa Social - Customer & Admin Dashboard</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/lucide@latest"></script>
 </head>
 <body class="h-full text-slate-800 antialiased flex flex-col">
-  <div class="flex-1 flex flex-col h-screen overflow-hidden">
-    <header class="bg-blue-600 text-white shadow-md p-4 flex justify-between items-center">
-      <h1 class="font-black text-xl">Imaanaa Social Platform</h1>
-      <button onclick="logout()" class="bg-blue-700 px-3 py-1 rounded text-xs font-bold">Ba'i (Logout)</button>
-    </header>
-    
-    <div class="flex-1 flex overflow-hidden">
-      <main class="flex-1 p-6 overflow-y-auto">
-        <div class="max-w-xl mx-auto bg-white p-6 rounded-2xl shadow">
-          <h2 class="font-bold text-lg mb-4">Customer Feed & Posting</h2>
-          <textarea id="postContent" placeholder="Maal yaadaa jirta? Viidiyoo ykn suuraa qoodadhu..." class="w-full border p-3 rounded-xl mb-3 text-sm"></textarea>
-          <input type="text" id="mediaUrl" placeholder="Media URL (Viidiyoo/Suuraa)" class="w-full border p-2 rounded-xl mb-3 text-xs">
-          <button onclick="createPost()" class="bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-bold w-full">Post Ergi (Pending Admin Approval)</button>
-        </div>
-      </main>
+
+  <!-- TOP HEADER -->
+  <header class="bg-blue-600 text-white shadow-md z-30 shrink-0">
+    <div class="max-w-7xl mx-auto px-4 py-2.5 flex items-center justify-between gap-4">
+      <div class="bg-white text-blue-600 font-black text-2xl px-2.5 py-0.5 rounded-lg">
+        ImaanaaApp
+      </div>
+      <div id="navControls" class="flex items-center gap-3"></div>
     </div>
+  </header>
+
+  <!-- WORKSPACE CONTAINER -->
+  <div class="flex-1 flex overflow-hidden relative">
+
+    <!-- CUSTOMER DASHBOARD (Default Feed, Chat, Reels) -->
+    <main id="customerDashboard" class="flex-1 bg-slate-100 overflow-y-auto p-4 hidden">
+      <div class="max-w-2xl mx-auto space-y-4">
+        <!-- Post Create Box -->
+        <div class="bg-white rounded-2xl p-4 shadow-sm border border-slate-200">
+          <textarea id="postTextInput" rows="2" placeholder="Maal yaadaa jirta? Video ykn Barreeffama qoodadhu..." class="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm outline-none resize-none"></textarea>
+          <div class="flex items-center justify-between pt-3 border-t border-slate-100 mt-2">
+            <input type="text" id="postMediaUrl" placeholder="Video/Image URL" class="text-xs p-2 border rounded-lg w-1/2">
+            <button onclick="submitCustomerPost()" class="bg-blue-600 text-white text-sm font-semibold px-4 py-1.5 rounded-xl shadow">Post</button>
+          </div>
+        </div>
+        <!-- Public Feed -->
+        <div id="publicPostsFeed" class="space-y-4"></div>
+      </div>
+    </main>
+
+    <!-- ADMIN DASHBOARD (Post Approval & User Suspension Only) -->
+    <main id="adminDashboard" class="flex-1 bg-slate-900 text-white overflow-y-auto p-6 hidden">
+      <div class="max-w-4xl mx-auto space-y-6">
+        <div class="bg-slate-800 p-5 rounded-2xl border border-slate-700 flex justify-between items-center">
+          <div>
+            <span class="bg-amber-400 text-slate-900 text-xs font-black px-2.5 py-0.5 rounded-full uppercase">Admin Control Panel</span>
+            <h2 class="text-2xl font-black mt-1">To'annoo Postii fi Maammiltootaa</h2>
+          </div>
+          <button onclick="logout()" class="bg-rose-600 text-white px-4 py-2 rounded-xl text-xs font-bold">Ba'i (Logout)</button>
+        </div>
+
+        <!-- Pending Posts Queue -->
+        <div class="bg-slate-800 rounded-2xl p-5 border border-slate-700">
+          <h3 class="font-bold text-amber-400 mb-3">Postiiwwan Mirkaneessa Eegaan (Pending Approval)</h3>
+          <div id="adminPendingContainer" class="space-y-3"></div>
+        </div>
+      </div>
+    </main>
+
   </div>
 
-  <!-- LOGIN / SIGNUP MODAL (QUICK TEST HIN QABU) -->
-  <div id="authModal" class="fixed inset-0 bg-slate-900/80 z-50 flex items-center justify-center p-4">
+  <!-- AUTHENTICATION MODAL (LOGIN / SIGNUP ADDAA BAAYE) -->
+  <div id="authModal" class="fixed inset-0 bg-slate-900/90 backdrop-blur-sm z-50 flex items-center justify-center p-4">
     <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl">
-      <h2 class="text-xl font-bold text-slate-800 mb-4 text-center">Imaanaa Social Seeni</h2>
-      <form onsubmit="handleLogin(event)" class="space-y-3">
-        <input type="text" id="loginUsername" placeholder="Username" required class="w-full border p-2.5 rounded-xl text-sm">
-        <input type="password" id="loginPassword" placeholder="Password" required class="w-full border p-2.5 rounded-xl text-sm">
-        <button type="submit" class="w-full bg-blue-600 text-white font-bold py-3 rounded-xl">Seeni (Login)</button>
+      <div class="text-center mb-6">
+        <h2 class="text-xl font-bold text-slate-800">Imaanaa Social Login</h2>
+        <p class="text-xs text-slate-500">Maaloo Maammila ykn Admin ta'uun seenaa.</p>
+      </div>
+
+      <!-- Tabs for Login / Signup -->
+      <div class="flex bg-slate-100 p-1 rounded-xl mb-4 text-xs font-bold">
+        <button id="tabBtnLogin" onclick="switchAuthTab('login')" class="flex-1 py-2 rounded-lg bg-white shadow text-blue-600">Login</button>
+        <button id="tabBtnSignup" onclick="switchAuthTab('signup')" class="flex-1 py-2 rounded-lg text-slate-500">Signup</button>
+      </div>
+
+      <form id="authForm" onsubmit="handleAuthSubmit(event)" class="space-y-3">
+        <div id="signupFields" class="hidden space-y-3">
+          <input type="text" id="regName" placeholder="Maqaa Guutuu" class="w-full text-sm border p-2.5 rounded-xl">
+        </div>
+        <input type="text" id="authUsername" placeholder="Username" required class="w-full text-sm border p-2.5 rounded-xl">
+        <input type="password" id="authPassword" placeholder="Password" required class="w-full text-sm border p-2.5 rounded-xl">
+        <button type="submit" id="authSubmitBtn" class="w-full bg-blue-600 text-white font-bold py-3 rounded-xl shadow">Seeni (Login)</button>
       </form>
     </div>
   </div>
 
   <script>
+    let authMode = 'login';
     let currentUser = null;
 
-    async function handleLogin(e) {
-      e.preventDefault();
-      const username = document.getElementById('loginUsername').value;
-      const password = document.getElementById('loginPassword').value;
+    function switchAuthTab(mode) {
+      authMode = mode;
+      document.getElementById('signupFields').classList.toggle('hidden', mode === 'login');
+      document.getElementById('tabBtnLogin').className = mode === 'login' ? 'flex-1 py-2 rounded-lg bg-white shadow text-blue-600' : 'flex-1 py-2 rounded-lg text-slate-500';
+      document.getElementById('tabBtnSignup').className = mode === 'signup' ? 'flex-1 py-2 rounded-lg bg-white shadow text-blue-600' : 'flex-1 py-2 rounded-lg text-slate-500';
+      document.getElementById('authSubmitBtn').innerText = mode === 'signup' ? "Galmaa'i (Signup)" : "Seeni (Login)";
+    }
 
-      const res = await fetch('/api/login', {
+    async function handleAuthSubmit(e) {
+      e.preventDefault();
+      const username = document.getElementById('authUsername').value;
+      const password = document.getElementById('authPassword').value;
+      const endpoint = authMode === 'signup' ? '/api/signup' : '/api/login';
+      
+      const payload = authMode === 'signup' 
+        ? { name: document.getElementById('regName').value, username, email: username + '@mail.com', password }
+        : { username, password };
+
+      const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password })
+        body: JSON.stringify(payload)
       });
       const data = await res.json();
+
       if (data.success) {
-        currentUser = data.user;
-        if (currentUser.is_admin) {
-          window.location.href = '/admin.html'; // Kallattiin gara Admin Dashboarditti darba
+        if (authMode === 'signup') {
+          alert("Galmee milkaa'inaa! Amma login godhaa.");
+          switchAuthTab('login');
         } else {
+          currentUser = data.user;
           document.getElementById('authModal').classList.add('hidden');
+          renderDashboards();
         }
       } else {
-        alert(data.error);
+        alert(data.error || "Dogoggora uumameera!");
       }
     }
 
-    async function createPost() {
-      const content = document.getElementById('postContent').value;
-      const mediaUrl = document.getElementById('mediaUrl').value;
-      const res = await fetch('/api/posts', {
+    function renderDashboards() {
+      if (!currentUser) return;
+      document.getElementById('navControls').innerHTML = `<span class="text-xs font-bold">${currentUser.name}</span> <button onclick="logout()" class="text-xs bg-rose-500 px-2 py-1 rounded">Logout</button>`;
+
+      if (currentUser.is_admin) {
+        document.getElementById('adminDashboard').classList.remove('hidden');
+        document.getElementById('customerDashboard').classList.add('hidden');
+        loadAdminPendingPosts();
+      } else {
+        document.getElementById('customerDashboard').classList.remove('hidden');
+        document.getElementById('adminDashboard').classList.add('hidden');
+        loadPublicFeed();
+      }
+    }
+
+    async function loadPublicFeed() {
+      const res = await fetch('/api/posts');
+      const posts = await res.json();
+      const feed = document.getElementById('publicPostsFeed');
+      feed.innerHTML = posts.length ? posts.map(p => `<div class="bg-white p-4 rounded-xl shadow-sm border"><p class="text-sm">${p.content}</p></div>`).join('') : '<p class="text-slate-400 text-center">Postiin hin jiru.</p>';
+    }
+
+    async function submitCustomerPost() {
+      const content = document.getElementById('postTextInput').value;
+      const mediaUrl = document.getElementById('postMediaUrl').value;
+      await fetch('/api/posts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: currentUser.id, content, mediaUrl, mediaType: mediaUrl ? 'video' : 'none' })
       });
-      const data = await res.json();
-      alert(data.message);
+      alert("Postiin keessan ergameera! Admin erga mirkaneessee booda baha.");
+      document.getElementById('postTextInput').value = '';
     }
 
-    function logout() { location.reload(); }
+    async function loadAdminPendingPosts() {
+      const res = await fetch('/api/admin/pending-posts');
+      const posts = await res.json();
+      const container = document.getElementById('adminPendingContainer');
+      container.innerHTML = posts.length ? posts.map(p => `
+        <div class="bg-slate-700 p-3 rounded-xl flex justify-between items-center">
+          <p class="text-xs">${p.content}</p>
+          <div class="flex gap-2">
+            <button onclick="moderatePost('${p.id}', 'approve')" class="bg-emerald-600 px-3 py-1 rounded text-xs font-bold">Approve</button>
+            <button onclick="moderatePost('${p.id}', 'reject')" class="bg-rose-600 px-3 py-1 rounded text-xs font-bold">Reject</button>
+          </div>
+        </div>
+      `).join('') : '<p class="text-slate-400 text-xs">Postii eegaa jiru hin jiru.</p>';
+    }
+
+    async function moderatePost(postId, action) {
+      await fetch('/api/admin/moderate-post', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ postId, action })
+      });
+      loadAdminPendingPosts();
+    }
+
+    function logout() {
+      currentUser = null;
+      document.getElementById('authModal').classList.remove('hidden');
+      document.getElementById('customerDashboard').classList.add('hidden');
+      document.getElementById('adminDashboard').classList.add('hidden');
+    }
+    lucide.createIcons();
   </script>
 </body>
 </html>
