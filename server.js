@@ -23,7 +23,7 @@ const ADMIN_CONTACT = {
   telegram: "@kalifaakka"
 };
 
-// Real-time Chat, 1-on-1 Call & Group Call WebRTC signaling
+// Real-time Chat, 1-on-1 Call, Group Call & Online Status
 let activeUsers = new Map(); // userId -> socketId
 let groupRooms = new Map();  // roomId -> Set of userIds
 
@@ -78,6 +78,7 @@ io.on('connection', (socket) => {
 
 // --- API ENDPOINTS ---
 
+// 1. Signup API
 app.post('/api/signup', async (req, res) => {
   const { name, email, password, phone, username } = req.body;
   try {
@@ -92,6 +93,7 @@ app.post('/api/signup', async (req, res) => {
   }
 });
 
+// 2. Login API (Admin & Customer Dashboard Routing check)
 app.post('/api/login', async (req, res) => {
   const { username, password, email } = req.body;
   const loginKey = username || email;
@@ -108,13 +110,24 @@ app.post('/api/login', async (req, res) => {
     const is_admin = (user.role === 'admin' || user.username === 'admin');
     const token = jwt.sign({ id: user.id, role: user.role, is_admin }, process.env.JWT_SECRET || 'secret_key');
     
-    res.json({ success: true, token, user: { id: user.id, name: user.name, username: user.username, role: user.role, is_admin, is_vip: user.is_vip } });
+    res.json({
+      success: true,
+      token,
+      user: {
+        id: user.id,
+        name: user.name,
+        username: user.username,
+        role: user.role,
+        is_admin,
+        is_vip: user.is_vip
+      }
+    });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
 });
 
-// Video & Post Upload (Pending by default for admin approval)
+// 3. Post & Video Upload (Default: Pending for Admin Approval)
 app.post('/api/posts', async (req, res) => {
   const { userId, content, mediaUrl, mediaType } = req.body;
   try {
@@ -122,7 +135,7 @@ app.post('/api/posts', async (req, res) => {
       'INSERT INTO posts (user_id, content, media_url, media_type, status) VALUES ($1, $2, $3, $4, $5)',
       [userId, content, mediaUrl, mediaType || 'none', 'pending']
     );
-    res.json({ success: true, message: "Postiin keessan milkaa'inaan ergameera! Admin erga mirkaneessee booda ni mul'ata." });
+    res.json({ success: true, message: "Postiin keessan milkaa'inaan ergameera! Admin erga mirkaneessee booda public ni ta'a." });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -137,9 +150,40 @@ app.get('/api/posts', async (req, res) => {
   }
 });
 
-// Friend Requests (Add, Confirm, Reject)
+// 4. Admin Moderation (Pending Posts & User Banning)
+app.get('/api/admin/pending-posts', async (req, res) => {
+  try {
+    const pending = await pool.query("SELECT * FROM posts WHERE status = 'pending' ORDER BY created_at DESC");
+    res.json(pending.rows);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/admin/moderate-post', async (req, res) => {
+  const { postId, action } = req.body; // 'approve' ykn 'reject'
+  try {
+    const newStatus = action === 'approve' ? 'approved' : 'rejected';
+    await pool.query('UPDATE posts SET status = $1 WHERE id = $2', [newStatus, postId]);
+    res.json({ success: true, message: `Postin ${newStatus} ta'eera!` });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/admin/moderate-user', async (req, res) => {
+  const { userIdToBan, banDays } = req.body;
+  try {
+    await pool.query('UPDATE users SET is_banned = true, ban_days = $1 WHERE id = $2', [banDays, userIdToBan]);
+    res.json({ success: true, message: `Maammilli guyyaa ${banDays}-f adabameera.` });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 5. Friend Requests (Add, Confirm, Reject)
 app.post('/api/friend-request', async (req, res) => {
-  const { senderId, receiverId, action } = req.body; // action: 'send', 'confirm', 'reject'
+  const { senderId, receiverId, action } = req.body; // 'send', 'confirm', 'reject'
   try {
     if (action === 'send') {
       await pool.query('INSERT INTO friends (sender_id, receiver_id, status) VALUES ($1, $2, $3)', [senderId, receiverId, 'pending']);
